@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/maksym/.claude/**)",
+      "Read(//home/maksym/.claude/plugins/**)"
+    ]
+  }
+}
