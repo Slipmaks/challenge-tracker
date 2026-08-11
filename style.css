@@ -97,11 +97,15 @@ button {
 .ring-streak { font-size: 13px; color: var(--fg-muted); }
 
 .sub {
-  margin: -16px 0 0;
+  margin: 0;
   font-size: 13px;
   text-align: center;
   color: var(--fg-muted);
 }
+
+/* Подтягиваем строку под кольцо только на главном экране: в шите финиша та же строка
+   стоит обычным абзацем */
+.app .sub { margin-top: -16px; }
 
 /* ── Сетка челленджа. Число колонок от N, клетка всегда квадратная ── */
 
@@ -166,6 +170,9 @@ button {
   justify-content: center;
   gap: 8px;
   transition: box-shadow 150ms, transform 150ms, background-color 150ms;
+  /* Export — это <a download>, а не button: без этого он выглядит синей ссылкой с подчёркиванием */
+  color: var(--fg);
+  text-decoration: none;
 }
 
 .btn.marked {
