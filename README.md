@@ -66,7 +66,7 @@ public/       manifest, service worker, icons — copied to the dist root
 docs/         release build; this is what GitHub Pages serves
 ```
 
-## Design and decisions (in Russian)
+## Design and decisions
 
 Both files were written before the code and are kept in sync with it — for a project you come
 back to in a month they're the two most valuable files in the repo:

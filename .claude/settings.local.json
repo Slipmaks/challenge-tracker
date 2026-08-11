@@ -3,7 +3,13 @@
     "allow": [
       "Read(//home/maksym/.claude/**)",
       "Read(//home/maksym/.claude/plugins/**)",
-      "mcp__pencil__execute"
+      "mcp__pencil__execute",
+      "Bash(rtk read *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk wc *)",
+      "Bash(rtk curl *)",
+      "Bash(rtk git *)"
     ]
   }
 }
