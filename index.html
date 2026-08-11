@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Challenge Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Шаг 1: статичный макет главного экрана. Данные — те же, что на макете в Pencil:
+     старт 25.07.2026, N = 30, сегодня 10.08.2026 (день 17), выполнено 13, пропущены 4, 9, 12.
+     На шаге 2 всё внутри <body> заменяется на mount_to_body. -->
+
+<div class="app">
+  <h1 class="title">My Challenge</h1>
+
+  <div class="ring-well pressed">
+    <div class="ring" style="--p:43">
+      <div class="ring-face">
+        <div class="ring-count">13/30</div>
+        <div class="ring-streak">streak 4</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="sub">Day 17 of 30 · best streak 4</p>
+
+  <div class="grid" style="--cols:7">
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day raised-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day raised-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day raised-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day done pressed-sm"></button>
+    <button class="day today raised-sm"></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+    <button class="day raised-flat" disabled></button>
+  </div>
+
+  <div class="footer">
+    <button class="btn raised">Mark day</button>
+    <div class="icons">
+      <button class="icon-btn raised-sm" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="3.2"/>
+          <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3 7.4 7.4M16.6 16.6l2.1 2.1M18.7 5.3 16.6 7.4M7.4 16.6l-2.1 2.1"/>
+        </svg>
+      </button>
+      <button class="icon-btn raised-sm" aria-label="Calendar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3" y="5" width="18" height="16" rx="3"/>
+          <path d="M3 10h18M8 3v4M16 3v4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

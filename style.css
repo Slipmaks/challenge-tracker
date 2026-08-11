@@ -1,0 +1,354 @@
+/* Challenge Tracker — неоморфизм, mobile-first. Все решения и обоснования — design.md */
+
+:root {
+  --bg: #e6e9ef;
+  --fg: #3b4252;
+  --fg-muted: #5a6172;
+  --accent: #4c7dff;
+  --accent-tint: #dbe3f7;
+  --accent-ink: #3f5bab;
+  --track: #ccd2dd;
+  --sh-dark: #c4c8d0;
+  --sh-light: #ffffff;
+  --r: 20px;
+}
+
+/* ── Три размера рельефа. Одна пара 6/12 на клетке 44px съедает саму клетку ── */
+
+.raised      { box-shadow:  6px  6px 12px var(--sh-dark), -6px -6px 12px var(--sh-light); }
+.pressed     { box-shadow: inset  6px  6px 12px var(--sh-dark), inset -6px -6px 12px var(--sh-light); }
+.raised-sm   { box-shadow:  4px  4px  8px var(--sh-dark), -4px -4px  8px var(--sh-light); }
+.pressed-sm  { box-shadow: inset  4px  4px  8px var(--sh-dark), inset -4px -4px  8px var(--sh-light); }
+.raised-flat { box-shadow:  2px  2px  4px var(--sh-dark), -2px -2px  4px var(--sh-light); }
+
+/* ── База ── */
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.app {
+  max-width: 390px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ── Кольцо. CSS, без SVG: --p приходит инлайн-стилем ── */
+
+.ring-well {
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.ring {
+  width: 188px;
+  height: 188px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--track) 0);
+}
+
+/* Внутренний круг цвета фона превращает диск в кольцо толщиной 14px */
+.ring-face {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.ring-count  { font-size: 30px; font-weight: 700; }
+.ring-streak { font-size: 13px; color: var(--fg-muted); }
+
+.sub {
+  margin: -16px 0 0;
+  font-size: 13px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+/* ── Сетка челленджа. Число колонок от N, клетка всегда квадратная ── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: 8px;
+}
+
+.grid.dense { gap: 4px; }
+
+.day {
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: box-shadow 150ms, transform 150ms, background-color 150ms;
+}
+
+.grid.dense .day { border-radius: 4px; }
+
+.day.done { background: var(--accent-tint); }
+
+/* Галочка чистым CSS: второй, независимый от теней признак «сделано» */
+.day.done::after,
+.btn.marked::before {
+  content: "";
+  width: 12px;
+  height: 6px;
+  border-left: 2.5px solid var(--accent-ink);
+  border-bottom: 2.5px solid var(--accent-ink);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* На плотных ярусах клетка меньше галочки — остаётся только заливка */
+.grid.dense .day.done::after { display: none; }
+
+/* Будущее и всё вне [start, start+N) гасится рельефом (.raised-flat), а не прозрачностью:
+   opacity 0.45 на клетке, у которой видна только тень, почти не отличима от пропущенного дня. */
+
+.day.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── Кнопки ── */
+
+.footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.btn {
+  width: 100%;
+  height: 56px;
+  border-radius: var(--r);
+  font-size: 17px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: box-shadow 150ms, transform 150ms, background-color 150ms;
+}
+
+.btn.marked {
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+/* :active — мгновение, .pressed — состояние. Разведены намеренно */
+.btn:not(:disabled):active,
+.day:active,
+.pill:active,
+.icon-btn:active,
+.cal-cell:active { transform: scale(0.95); }
+
+.icons {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  transition: box-shadow 150ms, transform 150ms;
+}
+
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* ── Bottom sheet ── */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: #0f1524a6;
+  display: flex;
+  align-items: flex-end;
+  animation: fade-in 200ms ease-out;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 390px;
+  margin: 0 auto;
+  max-height: 85dvh;          /* dvh, не vh: иначе клавиатура iOS перекроет поле имени */
+  overflow-y: auto;
+  background: var(--bg);
+  border-radius: 24px 24px 0 0;
+  /* Шит висит над затемнением: общей поверхности с фоном нет, пара неоморфных теней
+     превратилась бы в грязь. Одна мягкая тень вниз. */
+  box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.22);
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: sheet-in 250ms ease-out;
+}
+
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes sheet-in { from { transform: translateY(100%); } }
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheet-title { margin: 0; font-size: 20px; font-weight: 600; }
+
+/* ── Поля, пилюли ── */
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+
+.field-label { font-size: 13px; color: var(--fg-muted); }
+
+.input {
+  height: 48px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 17px/1 -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 0 16px;
+  width: 100%;
+}
+
+.input::placeholder { color: var(--fg-muted); }
+
+textarea.input {
+  height: 88px;
+  padding: 12px 16px;
+  line-height: 1.4;
+  resize: none;
+}
+
+.pills { display: flex; gap: 8px; }
+
+.pill {
+  flex: 1;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: box-shadow 150ms, transform 150ms, background-color 150ms;
+}
+
+.pill.on {
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+.pill-custom { flex: 1.4; padding: 0 12px; height: 44px; }
+
+.hint { font-size: 13px; color: var(--fg-muted); }
+
+/* Инлайн-подтверждение: кнопка на своём месте становится «… ?  Yes  No».
+   Ни window.confirm, ни модалки над модалкой. */
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+}
+
+.confirm-text { flex: 1; font-size: 15px; font-weight: 600; }
+
+.btn-slim {
+  height: 44px;
+  min-width: 72px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: box-shadow 150ms, transform 150ms, background-color 150ms;
+}
+
+.btn-slim.yes { background: var(--accent-tint); color: var(--accent-ink); }
+
+/* ── Календарь ── */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cal-month { font-size: 17px; font-weight: 600; }
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.cal-dow {
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  padding: 0;
+  transition: box-shadow 150ms, transform 150ms, background-color 150ms;
+}
+
+/* Заливка выигрывает у диапазона: день из done виден даже выпав из [start, start+N)
+   после Start over. Тапабельность отдельно решает is_editable. */
+.cal-cell.done { background: var(--accent-tint); color: var(--accent-ink); }
+
+/* Внутри клетки живёт дата, поэтому гасим тень, а не прозрачность:
+   opacity увела бы число к контрасту 2.5:1 */
+.cal-cell.off { color: var(--fg-muted); }
+
+.cal-cell.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.cal-blank { visibility: hidden; }
