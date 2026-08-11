@@ -259,15 +259,26 @@ pub fn SettingsSheet(
     let (paste, set_paste) = signal(String::new());
     let (bad_json, set_bad_json) = signal(false);
     let (confirm, set_confirm) = signal(Confirm::None);
+    let (import_open, set_import_open) = signal(false);
 
-    let commit = move |_| {
+    let commit = move || {
         let mut c = cur.get_untracked();
         c.name = name.get_untracked();
         c.length = length.get_untracked();
         c.start = NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(c.start);
         set_challenge.set(Some(c.sanitize(today)));
-        on_close.run(());
     };
+
+    // Закрытие и есть сохранение: кнопки Save в макете настроек нет, а другого выхода из шита,
+    // кроме X и тапа по затемнению, дизайн не предусматривает — «отмены» тут просто нет.
+    // Импорт и сброс закрываются НЕ через это, им нужен сырой on_close: иначе поверх свежих
+    // данных лягут старые значения полей формы.
+    let close = Callback::new(move |_| {
+        if !first_run {
+            commit();
+        }
+        on_close.run(());
+    });
 
     let parsed = move || serde_json::from_str::<Challenge>(&paste.get_untracked()).ok();
 
@@ -296,19 +307,11 @@ pub fn SettingsSheet(
         on_close.run(());
     };
 
-    let main_button = move || {
-        view! {
-            <button class="btn raised" on:click=commit>
-                {if first_run { "Start" } else { "Save" }}
-            </button>
-        }
-    };
-
     view! {
         <Sheet
             title=if first_run { "New challenge" } else { "Settings" }
             closable=!first_run
-            on_close=on_close
+            on_close=close
         >
             <div class="field">
                 <span class="field-label">"Name"</span>
@@ -371,11 +374,6 @@ pub fn SettingsSheet(
                 />
             </div>
 
-            // В онбординге главная кнопка стоит ПОСЛЕ импорта: главное действие внизу,
-            // в зоне большого пальца. В настройках Save стоит сразу под полями, к которым
-            // относится, и подальше от Reset everything.
-            {(!first_run).then(main_button)}
-
             {(!first_run)
                 .then(|| {
                     view! {
@@ -396,48 +394,83 @@ pub fn SettingsSheet(
                     }
                 })}
 
-            <div class="field">
-                <span class="field-label">"Import JSON"</span>
-                // ponytail: textarea вместо FileReader и его async-обвязки
-                <textarea
-                    class="input raised-sm"
-                    placeholder="Paste JSON here"
-                    prop:value=move || paste.get()
-                    on:input=move |ev| set_paste.set(event_target_value(&ev))
-                />
-                <Show when=move || bad_json.get()>
-                    <span class="hint">"Invalid JSON"</span>
-                </Show>
-                {move || match confirm.get() {
-                    Confirm::Overwrite => {
-                        view! {
-                            <div class="confirm raised-sm">
-                                <span class="confirm-text">"Overwrite?"</span>
-                                <button class="btn-slim yes raised-sm" on:click=move |_| apply_import()>
-                                    "Yes"
-                                </button>
-                                <button
-                                    class="btn-slim raised-sm"
-                                    on:click=move |_| set_confirm.set(Confirm::None)
-                                >
-                                    "No"
-                                </button>
-                            </div>
-                        }
-                            .into_any()
+            // В макете импорт — одна плашка «Import JSON», без поля для вставки. Поле
+            // раскрывается по тапу: в покое шит совпадает с макетом по высоте, а textarea
+            // не занимает 130px впустую в сценарии, который случается раз в жизни телефона.
+            <Show
+                when=move || import_open.get()
+                fallback=move || {
+                    view! {
+                        <button
+                            class="btn-secondary raised-sm"
+                            on:click=move |_| set_import_open.set(true)
+                        >
+                            "Import JSON"
+                        </button>
                     }
-                    _ => {
-                        view! {
-                            <button class="btn-secondary raised-sm" on:click=import_click>
-                                "Import"
-                            </button>
+                }
+            >
+                <div class="field">
+                    <span class="field-label">"Import JSON"</span>
+                    // ponytail: textarea вместо FileReader и его async-обвязки
+                    <textarea
+                        class="input raised-sm"
+                        placeholder="Paste JSON here"
+                        prop:value=move || paste.get()
+                        on:input=move |ev| set_paste.set(event_target_value(&ev))
+                    />
+                    <Show when=move || bad_json.get()>
+                        <span class="hint">"Invalid JSON"</span>
+                    </Show>
+                    {move || match confirm.get() {
+                        Confirm::Overwrite => {
+                            view! {
+                                <div class="confirm raised-sm">
+                                    <span class="confirm-text">"Overwrite?"</span>
+                                    <button
+                                        class="btn-slim yes raised-sm"
+                                        on:click=move |_| apply_import()
+                                    >
+                                        "Yes"
+                                    </button>
+                                    <button
+                                        class="btn-slim raised-sm"
+                                        on:click=move |_| set_confirm.set(Confirm::None)
+                                    >
+                                        "No"
+                                    </button>
+                                </div>
+                            }
+                                .into_any()
                         }
-                            .into_any()
-                    }
-                }}
-            </div>
+                        _ => {
+                            view! {
+                                <button class="btn-secondary raised-sm" on:click=import_click>
+                                    "Import"
+                                </button>
+                            }
+                                .into_any()
+                        }
+                    }}
+                </div>
+            </Show>
 
-            {first_run.then(main_button)}
+            // Главное действие онбординга стоит внизу, в зоне большого пальца. В настройках
+            // такой кнопки нет вообще: там сохраняет закрытие шита.
+            {first_run
+                .then(|| {
+                    view! {
+                        <button
+                            class="btn raised"
+                            on:click=move |_| {
+                                commit();
+                                on_close.run(());
+                            }
+                        >
+                            "Start"
+                        </button>
+                    }
+                })}
 
             {(!first_run)
                 .then(|| {
@@ -448,7 +481,7 @@ pub fn SettingsSheet(
                             Confirm::Reset => {
                                 view! {
                                     <div class="confirm raised-sm">
-                                        <span class="confirm-text">"Sure?"</span>
+                                        <span class="confirm-text">"Reset everything?"</span>
                                         <button class="btn-slim yes raised-sm" on:click=reset>
                                             "Yes"
                                         </button>
