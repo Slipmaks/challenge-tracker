@@ -261,12 +261,31 @@ pub fn SettingsSheet(
     let (confirm, set_confirm) = signal(Confirm::None);
     let (import_open, set_import_open) = signal(false);
 
+    // Настройки правят существующий челлендж и только его. Если челленджа нет — снесли через
+    // Reset everything — закрытие шита не должно воскрешать его из полей формы: старый старт
+    // плюс короткая длина дают мгновенный Finished с пустым done.
     let commit = move || {
-        let mut c = cur.get_untracked();
-        c.name = name.get_untracked();
-        c.length = length.get_untracked();
-        c.start = NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(c.start);
-        set_challenge.set(Some(c.sanitize(today)));
+        set_challenge.update(|slot| {
+            if let Some(mut c) = slot.take() {
+                c.name = name.get_untracked();
+                c.length = length.get_untracked();
+                c.start =
+                    NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(c.start);
+                *slot = Some(c.sanitize(today));
+            }
+        });
+    };
+
+    // Создание — отдельное действие онбординга, а не тот же commit: только здесь появление
+    // челленджа из ничего законно. Challenge::new сам зовёт sanitize и даёт пустой done.
+    let create = move || {
+        let s = NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(today);
+        set_challenge.set(Some(Challenge::new(
+            name.get_untracked(),
+            s,
+            length.get_untracked(),
+            today,
+        )));
     };
 
     // Закрытие и есть сохранение: кнопки Save в макете настроек нет, а другого выхода из шита,
@@ -274,9 +293,7 @@ pub fn SettingsSheet(
     // Импорт и сброс закрываются НЕ через это, им нужен сырой on_close: иначе поверх свежих
     // данных лягут старые значения полей формы.
     let close = Callback::new(move |_| {
-        if !first_run {
-            commit();
-        }
+        commit();
         on_close.run(());
     });
 
@@ -463,7 +480,7 @@ pub fn SettingsSheet(
                         <button
                             class="btn raised"
                             on:click=move |_| {
-                                commit();
+                                create();
                                 on_close.run(());
                             }
                         >

@@ -25,8 +25,10 @@ fn App() -> impl IntoView {
     // Option, а не Challenge: None — это «челленджа ещё нет», и именно оно включает онбординг.
     let (challenge, set_challenge) = signal(load());
     let (sheet, set_sheet) = signal(Sheet::None);
-    // Флаг «итог уже видел» не сохраняется: is_finished — производное, а производное не храним
-    let (finish_seen, set_finish_seen) = signal(false);
+    // Не bool, а какой именно финиш уже показали. Флагом он не возвращался в false: после смены
+    // длины (или после сброса и нового челленджа) шит финиша больше не появлялся, и Start over
+    // приходил только с перезапуском приложения. Не сохраняется: is_finished — производное.
+    let (finish_seen, set_finish_seen) = signal(None::<(NaiveDate, u32)>);
 
     Effect::new(move |_| {
         // Только Some: иначе первый же рендер сохранил бы пустышку и онбординг больше
@@ -44,6 +46,12 @@ fn App() -> impl IntoView {
             .unwrap_or_else(|| Challenge::new(String::new(), today, 30, today))
     });
 
+    // Челлендж, чей итог уже посмотрели: другой старт или другая длина — другой финиш
+    let finish_id = move || {
+        let c = cur.get();
+        (c.start, c.length)
+    };
+
     let toggle = Callback::new(move |d: NaiveDate| {
         set_challenge.update(|c| {
             if let Some(c) = c {
@@ -53,14 +61,14 @@ fn App() -> impl IntoView {
     });
     let close = Callback::new(move |_: ()| set_sheet.set(Sheet::None));
     let noop = Callback::new(|_: ()| ());
-    let dismiss_finish = Callback::new(move |_: ()| set_finish_seen.set(true));
+    let dismiss_finish = Callback::new(move |_: ()| set_finish_seen.set(Some(finish_id())));
+    // Флаг тут больше не нужен: после сдвига старта челлендж не завершён, и шит уходит сам
     let start_over = Callback::new(move |_: ()| {
         set_challenge.update(|c| {
             if let Some(c) = c {
                 c.start = today; // историю не трогаем, меняется только окно
             }
-        });
-        set_finish_seen.set(true);
+        })
     });
 
     let marked = move || cur.get().is_done(today);
@@ -126,17 +134,19 @@ fn App() -> impl IntoView {
             </div>
         </div>
 
+        // Онбординг — отдельный слот, а не ветка выражения ниже: в одном слоте у обеих панелей
+        // один тип view (SettingsSheet), и Leptos пересобирает панель на месте вместо того чтобы
+        // размонтировать. Своим слотом настройки после сброса умирают вместе со своей формой.
+        // Закрыть онбординг нельзя, поэтому on_close никогда не зовётся.
+        <Show when=move || challenge.get().is_none()>
+            <SettingsSheet cur today first_run=true set_challenge on_close=noop />
+        </Show>
+
         {move || {
             if challenge.get().is_none() {
-                // Онбординг: закрыть нельзя, поэтому on_close никогда не зовётся
-                return Some(
-                    view! {
-                        <SettingsSheet cur today first_run=true set_challenge on_close=noop />
-                    }
-                        .into_any(),
-                );
+                return None;
             }
-            if cur.get().is_finished(today) && !finish_seen.get() {
+            if cur.get().is_finished(today) && finish_seen.get() != Some(finish_id()) {
                 return Some(
                     view! {
                         <FinishSheet cur on_start_over=start_over on_close=dismiss_finish />
