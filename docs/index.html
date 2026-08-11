@@ -5,14 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#e6e9ef">
 <title>Challenge Tracker</title>
-<link data-trunk rel="rust" />
-<link data-trunk rel="css" href="style.css" />
+
+<script type="module">
+import init, * as bindings from '/challenge-tracker/challenge-tracker-8a3750a1be7160e1.js';
+const wasm = await init({ module_or_path: '/challenge-tracker/challenge-tracker-8a3750a1be7160e1_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+<link rel="stylesheet" href="/challenge-tracker/style-c337a3cec3c94074.css" integrity="sha384-2r9p2yokSASk2w+VRAotanoZ46Mmkzj1Ke4J/UnKBDJ4mRqCza0m0E+uV0h/8YSA"/>
 <!-- target-path=".": sw.js обязан лежать в корне, иначе его scope не покроет приложение -->
-<link data-trunk rel="copy-dir" href="public" data-target-path="." />
+
 <link rel="manifest" href="manifest.json">
 <!-- iOS для «Добавить на домашний экран» берёт apple-touch-icon и SVG не принимает -->
 <link rel="apple-touch-icon" href="icon-192.png">
-</head>
+<link rel="modulepreload" href="/challenge-tracker/challenge-tracker-8a3750a1be7160e1.js" crossorigin="anonymous" integrity="sha384-n5MxqJuKWbmwOMmFwmGJDWpRpeCA0DJKZnkdrW+aUc1ucrozbCcTLwYfTBJEWMgG"><link rel="preload" href="/challenge-tracker/challenge-tracker-8a3750a1be7160e1_bg.wasm" crossorigin="anonymous" integrity="sha384-1h4Frgh11/aZwtW2Z/Ab+LlE5FJe9irxPQ+SK96eidA4hcrF4MZfbg10sgfnYh5x" as="fetch" type="application/wasm"></head>
 <body>
 <script>
   // Путь относительный: под /challenge-tracker/ регистрация даст /challenge-tracker/sw.js,
