@@ -40,18 +40,33 @@
 устройства. Отметил в 00:10 после ночной тренировки — попало в новый день; лечится тапом
 по вчерашней клетке, поэтому отдельной настройки «граница дня» не делаем.
 
-## Факты об окружении (проверено 2026-08-10)
+## Факты об окружении (проверено 2026-08-11)
 
-- Машина — Linux. `rustc 1.97.1`, `cargo 1.97.1`, `rustup 1.29.0` **уже стоят**. Не хватает
-  только двух вещей, и это весь шаг 0: таргета `wasm32-unknown-unknown` и `trunk`.
+- Машина — Linux (Fedora, GCC 16.1.1). `rustc 1.97.1`, `cargo 1.97.1`, `rustup 1.29.0`
+  **уже стоят**. Ставить пришлось только таргет `wasm32-unknown-unknown` и `trunk`.
+- Версии из реестра: `leptos 0.8.20` и `trunk 0.21.14` — последние **стабильные**. Рядом лежат
+  `leptos 0.9.0-beta` и `trunk 0.22.0-beta.2`, взяты стабильные: книга и примеры описывают 0.8,
+  а на beta ошибку фреймворка не отличить от своей.
+- **`cargo install trunk` на этой машине не собирается**, и это не лечится ни `--locked`, ни
+  снятием `--locked`. Транзитивный `libdeflate-sys 1.23.1` (приходит через `oxipng`, не за
+  фичей — отключить нельзя) компилирует C с атрибутом `target("no-evex512")`, которого GCC 16
+  уже не знает. Лечение: готовый бинарь из релизов trunk, это штатный способ установки из их
+  README. Версия зависимости зафиксирована выше, поэтому «взять поновее» тут не работает.
 - Node 26.5.0 / npm 12.0.1 есть (не нужны), pnpm/bun нет, Python 3.14.3 есть.
 - Для иконок PWA есть чем рисовать без SVG-конвертеров: `Pillow 12.3.0` и `ImageMagick`
-  (`magick`). `rsvg-convert` и `inkscape` отсутствуют.
-- Проект: `/home/maksym/MyProjects/Rust/challange-tracker`, внутри `architecture.md` (этот
-  файл) и `design.md`. Git-репозитория пока нет — она появляется на шаге 5.
+  (`magick`). `rsvg-convert` и `inkscape` отсутствуют. Иконки нарисованы Pillow.
+- `gh` **не установлен** — репозиторий на GitHub и включение Pages делаются руками.
+- Проект: `/home/maksym/MyProjects/Rust/challange-tracker`. Git-репозиторий уже есть, и макет
+  `challange-design.pen` в нём — то есть версионируется вместе с кодом.
+- Хост-таргет `x86_64-unknown-linux-gnu` на месте, поэтому `cargo test` идёт нативно.
+  `web-sys` и `leptos` под хост компилируются, так что `load`/`save` не пришлось закрывать
+  `#[cfg(target_arch = "wasm32")]` — проверено, не предположение.
 - Leptos CSR официально поддержан: `cargo add leptos --features=csr` + Trunk (book.leptos.dev).
 - `chrono` с фичами `clock` + `wasmbind` даёт `Local::now()` в браузере через JS `Date`.
+  Плюс фича `serde` — без неё `NaiveDate` не сериализуется.
 - API Leptos 0.8: `signal(v)` → `(read, write)`, `Effect::new`, `#[component]`, `mount_to_body`.
+- Ловушка `view!`: значение атрибута не может начинаться с `if` — `class=move || if a {..}`
+  не парсится, нужно `class=move || { if a {..} }`.
 
 ## Файлы
 
@@ -60,20 +75,23 @@ challange-tracker/
   Cargo.toml
   index.html          — точка входа Trunk (data-trunk link'и, manifest, регистрация SW)
   style.css           — вся палитра и неоморфизм
-  mockup.html         — шаг 1, статичный макет; после переноса удалить
   src/
-    main.rs           — mount_to_body + компонент App (композиция + модалки)
+    main.rs           — mount_to_body + компонент App (композиция + выбор шита)
     state.rs          — Challenge, чистая логика, load/save, #[cfg(test)] тесты
-    ui.rs             — Ring, DayGrid, CalendarModal, SettingsModal
-  public/
+    ui.rs             — Sheet, Ring, DayGrid, CalendarSheet, SettingsSheet, FinishSheet
+  public/             — копируется в корень dist через data-target-path="."
     manifest.json
     sw.js
     icon-192.png, icon-512.png
+  docs/               — релизный билд, с него отдаётся GitHub Pages (коммитится)
   architecture.md     — стек, модель данных, шаги, «что сознательно не делаем»
   design.md           — весь визуальный дизайн: композиция, модалки, состояния, строки UI
+  challange-design.pen — макет, 7 экранов
 ```
 
 Четыре файла кода. Больше модулей не нужно — вся логика умещается в `state.rs`.
+Отдельного `mockup.html` нет: статичная разметка шага 1 жила прямо в `index.html` и там же
+была заменена на `mount_to_body`, поэтому `style.css` не пришлось писать дважды.
 
 ## Модель данных
 
@@ -104,11 +122,25 @@ pub struct Challenge {
 ```rust
 pub fn day_number(&self, today: NaiveDate) -> i64      // (today - start) + 1
 pub fn done_count(&self) -> usize                       // только дни внутри [start, start+N)
+pub fn percent(&self) -> u32                            // для --p кольца
 pub fn is_finished(&self, today: NaiveDate) -> bool     // day_number > length
-pub fn current_streak(&self, today: NaiveDate) -> u32
-pub fn best_streak(&self) -> u32
+pub fn current_streak(&self, today: NaiveDate) -> u32   // тем же окном, стоп на start
+pub fn best_streak(&self) -> u32                        // тем же окном
 pub fn is_editable(&self, d: NaiveDate, today: NaiveDate) -> bool  // start ≤ d ≤ min(today, start+N-1)
+pub fn toggle(&mut self, d: NaiveDate, today: NaiveDate)           // единственная запись в done
+pub fn sanitize(self, today: NaiveDate) -> Self                    // clamp(1..365), старт ≤ today
+pub fn cols(&self) -> u32                               // 7 / 9 / 12 / 22 от N
+pub fn grid_tappable(&self) -> bool                     // только на ярусе 7 колонок
 ```
+
+**Все метрики считаются окном `[start, start+N)`, включая серии.** Иначе после `Start over`
+на экране оказался бы `best streak` из прошлого цикла — число, которое по видимой сетке не
+воспроизводится. `current_streak` по той же причине не уходит ниже `start`.
+
+`toggle` и `sanitize` — два места, где данные могут испортиться, поэтому проверки живут
+внутри них, а не в UI. `toggle` — единственная запись в `done`, значит отметить завтра
+невозможно по построению. `sanitize` зовётся при сохранении настроек и **при импорте JSON**:
+второе и есть настоящая граница доверия, поле `Custom` только вторая по важности.
 
 Это же и общее правило Leptos: выводить значение, а не писать в сигнал из эффекта.
 
@@ -142,17 +174,23 @@ Rust, cargo и rustup на машине есть, ставить их не ну�
 ```bash
 rustc --version && cargo --version          # ожидаем 1.8x+
 rustup target add wasm32-unknown-unknown    # идемпотентно, если уже есть — no-op
-trunk --version || cargo install trunk      # trunk в базовую установку не входит
+
+# trunk готовым бинарём: из исходников он тут не собирается, см. «Факты об окружении»
+curl -fsSL https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz \
+  | tar -xzf- -C ~/.cargo/bin
+trunk --version
 ```
 
 Если `rustup` нет (Rust поставлен пакетным менеджером, а не rustup) — таргет добавляется
-только через rustup, тогда его придётся поставить. `cargo install trunk` собирается несколько
-минут, это нормально.
+только через rustup, тогда его придётся поставить.
 
-### 1. Статичный макет — `mockup.html` + `style.css`
+### 1. Статичная вёрстка — `style.css` + разметка прямо в `index.html`
 
 Никакого Rust. Обычный HTML, открывается двойным кликом, правка тени видна сразу —
-в отличие от Leptos, где каждая правка это пересборка WASM.
+в отличие от Leptos, где каждая правка это пересборка WASM. Отдельный `mockup.html` не нужен:
+`index.html` требуется всё равно, а на шаге 2 его содержимое заменяется на `mount_to_body`.
+Верстается только главный экран — он несёт весь рельеф; шиты появляются сразу в Leptos,
+потому что в статике их нечем переключать.
 
 **Что именно верстать — `design.md`:** композиция экрана, состояния кнопки и клеток, bottom
 sheet и его ловушки, календарь, онбординг, строки интерфейса. Ниже — только токены и правила, на
@@ -184,9 +222,10 @@ sheet и его ловушки, календарь, онбординг, стро
 
 Сетка дней: `grid-template-columns: repeat(var(--cols), 1fr)` + `aspect-ratio: 1` на клетке.
 Календарная арифметика ей не нужна вообще, но **`auto-fill` с `minmax(24px, 1fr)` не годится**:
-он даёт клетку 24px, а по клетке надо попадать пальцем. Число колонок берётся от N (7 / 9 / 12),
-и ниже 40px клетка перестаёт быть кнопкой — правка прошлого уходит в календарь. Таблица и
-причины — `design.md`.
+он даёт клетку 24px, а по клетке надо попадать пальцем. Число колонок берётся от N
+(7 / 9 / 12 / 22), и ниже 40px клетка перестаёт быть кнопкой — правка прошлого уходит в
+календарь. Границы ярусов считаются от высоты экрана, а не на глаз: под сетку остаётся ~300px.
+Таблица и причины — `design.md`.
 
 Верстать при ширине 390px. Кнопка `Mark day` — не меньше 44×44 и в зоне большого пальца.
 Отступы — по сетке 8px; радиус, тени и 44×44 из неё сознательно выпадают, см. `design.md`.
@@ -196,10 +235,11 @@ sheet и его ловушки, календарь, онбординг, стро
 ```toml
 [dependencies]
 leptos = { version = "0.8", features = ["csr"] }
-chrono = { version = "0.4", features = ["clock", "wasmbind"], default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["clock", "wasmbind", "serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 web-sys = { version = "0.3", features = ["Window", "Storage"] }
+js-sys = "0.3"   # только encode_uri_component для data: URL экспорта
 ```
 
 `index.html`: `<link data-trunk rel="rust" />`, `<link data-trunk rel="css" href="style.css"/>`,
@@ -214,7 +254,8 @@ web-sys = { version = "0.3", features = ["Window", "Storage"] }
 `CalendarModal` (месяц + `‹ ›`, дни недели из `NaiveDate::weekday`), `SettingsModal { first_run }`
 — он же онбординг при `first_run = true`.
 
-Перенос разметки из `mockup.html` в `view!` — `style.css` переезжает как есть, без правок.
+Статичная разметка из `index.html` переезжает в `view!`, `<body>` остаётся пустым, `<link>` на
+CSS меняется на `data-trunk rel="css"`. `style.css` переезжает как есть, без правок.
 
 ### 3. Настройки, финиш, экспорт
 
@@ -232,8 +273,17 @@ web-sys = { version = "0.3", features = ["Window", "Storage"] }
 
 Экспорт/импорт — осознанно самый ленивый вариант, помечаем `// ponytail:`:
 - экспорт: `<a download="challenge.json" href="data:application/json;charset=utf-8,{urlencoded}">`
-  — без `web_sys::Blob` и без `URL::create_object_url`;
-- импорт: `<textarea>` + кнопка «Вставить JSON» — без `FileReader` и его async-обвязки.
+  — без `web_sys::Blob` и без `URL::create_object_url`. Кодирование — `js_sys::encode_uri_component`;
+- импорт: `<textarea>` + кнопка `Import` — без `FileReader` и его async-обвязки.
+
+**Импорт защищён тем же подтверждением, что и сброс:** он затирает челлендж так же
+безвозвратно, поэтому `Import` на своём месте становится `Overwrite? Yes No`. Спрашивает только
+про валидный JSON — на мусор сразу отвечает строкой `Invalid JSON`, ничего не тронув. В
+онбординге подтверждения нет: перезаписывать нечего.
+
+Тап по затемнению закрывает шит через `ev.stop_propagation()` на самой панели, а не сверкой
+`event.target` с элементом затемнения: клик внутри панели просто не доходит до backdrop. Тот же
+эффект короче, и ловушка с `<input type="date">` закрыта так же надёжно.
 
 ### 4. PWA
 
@@ -257,19 +307,28 @@ self.addEventListener('fetch', e => e.respondWith(
 ));
 ```
 
-Регистрация — скриптом в `index.html`. **Путь регистрации должен учитывать `--public-url`**:
-на Pages это `/challenge-tracker/sw.js`, а не `/sw.js`, иначе scope не совпадёт и оффлайн не
-заработает.
+Регистрация — скриптом в `index.html`, **относительным путём** `register('sw.js')`: под
+`--public-url /challenge-tracker/` он сам разворачивается в `/challenge-tracker/sw.js`.
+Абсолютный `/sw.js` дал бы scope `/`, не совпадающий с приложением, и оффлайн бы не заработал.
+
+По той же причине `public` копируется с `data-target-path="."`: из `dist/public/sw.js` scope
+покрывал бы только `/public/`. Файл обязан лежать в корне билда.
 
 ### 5. Деплой на GitHub Pages
 
+Схема — **Pages из `/docs` на master**: ноль CI, ноль вторых веток, ноль subtree-пушей,
+деплой это обычный коммит. Цена — артефакты сборки в истории.
+
 ```bash
-git init
-trunk build --release --public-url /challenge-tracker/
+trunk build --release --dist docs --public-url /challenge-tracker/
+git add docs && git commit -m "деплой"
 ```
 
-`dist/` → ветка `gh-pages` (или Pages из `/docs`). HTTPS от Pages обязателен: без него
-не будет ни установки на домашний экран, ни service worker.
+Дальше вручную (`gh` на машине нет): создать публичный репозиторий `challenge-tracker`,
+`git remote add origin …`, `git push -u origin master`, и в Settings → Pages выбрать
+`Deploy from a branch` → `master` → `/docs`.
+
+HTTPS от Pages обязателен: без него не будет ни установки на домашний экран, ни service worker.
 
 Локальная папка называется `challange-tracker` — опечатка в `challenge`. Имя репозитория
 попадёт в публичный адрес, поэтому репа называется **`challenge-tracker`**: и опечатки нет, и
@@ -288,38 +347,47 @@ trunk build --release --public-url /challenge-tracker/
 ```bash
 cargo test
 ```
-`#[cfg(test)] mod tests` в `state.rs` — минимум три случая серии: подряд без сегодня
-(считается от вчера), дырка посередине (серия рвётся), сегодня отмечено (входит в серию).
-Плюс `day_number` на границах и `is_finished` на дне N и N+1.
+`#[cfg(test)] mod tests` в `state.rs` — 12 тестов, все на фикстуре с макета (старт 16 дней
+назад, N = 30, выполнено 13, пропущены дни 4, 9, 12, сегодня пусто):
 
-И четыре случая на `is_editable`, потому что именно она защищает `done` от мусора:
-`start - 1` → `false`, `start + N` → `false`, `today + 1` → `false`, `today` внутри
-челленджа → `true`.
+- серия: сегодня пусто → 4 (считается от вчера); сегодня отмечено → 5; вчера тоже пусто → 0;
+  день до старта отмечен → в серию не входит;
+- `day_number` на дне 1 и N, `is_finished` на дне N и N+1;
+- `is_editable` на `start - 1`, `start + N`, `today + 1`, `today`, `start`;
+- `toggle` вне окна не пишет в `done` ничего — именно он защищает данные от мусора;
+- `sanitize`: `length = 0` → 1, `length = 10_000` → 365, старт из будущего → сегодня;
+- пустое имя → `My Challenge`;
+- `cols` на 30 / 35 / 36 / 60 / 100 / 120 / 121 / 365;
+- `Start over`: `done` цел, но `done_count` и `best_streak` обнулились;
+- JSON round-trip и читаемость дат руками.
 
 **UI:**
 ```bash
-trunk serve --open
+trunk serve --port 8080
 ```
-DevTools → device mode 390×844. Прогнать руками (чистый `localStorage` для п. 1–2):
 
-1. Первый запуск → онбординг. Проверить, что закрыть его нельзя: `Esc`, тап по затемнению,
-   иконка X — ничего не срабатывает. `Start` с пустым именем → челлендж `My Challenge`.
-2. Снова чистый `localStorage` → в онбординге сразу вставить JSON из бэкапа → челлендж
-   восстановился, а не был затёрт свежесозданным.
-3. Тап `Mark day` → кнопка вдавливается и становится `Marked` с галочкой, клетка тоже, серия и кольцо
-   растут. Повторный тап → всё вернулось.
-4. Тап по прошлой клетке внутри челленджа → переключается.
-5. Тап по будущей клетке и по клетке до старта → **ничего не происходит**, обе пригашены.
-6. F5 → состояние на месте (значит `localStorage` работает), онбординг не показывается.
-7. Настройки: N = 100 → сетка перестроилась, кольцо пересчиталось.
-8. Настройки: `Reset everything` → кнопка на месте превратилась в `Sure? Yes No`; `No`
-   возвращает её обратно, ничего не удалив.
-9. Дата старта на 31 день назад при N = 30 → показался итог; закрыть его → F5 → **итог снова
-   показался** (флаг не сохраняется, так и задумано); `Start over` → галочки в календаре остались.
-10. Экспорт → скачался `challenge.json`; полный сброс; импорт → всё вернулось.
-11. Открыть календарь, ткнуть в `<input type="date">` в настройках → панель **не** закрылась;
-    сфокусировать поле имени → панель не ушла под клавиатуру.
-12. DevTools → Network → Offline → F5: приложение открывается.
+Проверено скриншотами headless Chrome при 390px, с засеянным `localStorage` (стенд для этого
+лежал в `dist/`, то есть вне репозитория):
+
+1. Главный экран при `13/30`: рельеф, кольцо, три вида клеток — выполнено, пропущено, будущее.
+2. Тап `Mark day` → `14/30`, серия 5, кнопка вдавилась и стала `Marked` с галочкой,
+   клетка сегодня тоже.
+3. Онбординг на чистом `localStorage`: без X, поля с дефолтами, `Import` над `Start`,
+   за шитом виден главный экран с `0/30`.
+4. Настройки: поля, `Save`, `Export JSON`, импорт, `Reset everything`.
+5. Календарь: август 2026, четыре состояния дня, даты неактивных читаемы.
+6. Финиш: `Finished · best streak 8` под кольцом и шит `24 of 30 · best streak 8`.
+7. Сетка при N = 60 (9 колонок) и N = 365 (22 колонки) — кнопка и ряд иконок остаются на экране.
+8. Собранный `docs/` под префиксом `/challenge-tracker/`: два прохода с сервером, затем сервер
+   выключен → приложение открылось из кэша service worker целиком, вместе с wasm и css.
+
+Остаётся руками — то, что из headless-браузера не проверяется:
+
+9. Тап мимо шита при **открытом** нативном `<input type="date">` → панель не закрылась.
+10. Фокус в поле имени на iOS → панель не ушла под клавиатуру (`85dvh`).
+11. Долгий тап и двойной тап по клетке → нет выделения текста и нет зума
+    (`touch-action: manipulation`).
+12. Тап по кнопке при `:active` → `scale(0.95)` ощущается как нажатие, а не как смена состояния.
 
 **На телефоне** (после деплоя): открыть Pages-URL, «Добавить на домашний экран», включить
 авиарежим, запустить с иконки, поставить галочку, выйти-войти — она на месте.
