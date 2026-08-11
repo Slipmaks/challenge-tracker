@@ -93,7 +93,7 @@ fn App() -> impl IntoView {
 
             <div class="footer">
                 <button
-                    class=move || { if marked() { "btn marked pressed" } else { "btn raised" } }
+                    class=move || { if marked() { "btn marked raised" } else { "btn raised" } }
                     disabled=move || !markable()
                     on:click=move |_| toggle.run(today)
                 >
@@ -106,11 +106,10 @@ fn App() -> impl IntoView {
                         on:click=move |_| set_sheet.set(Sheet::Settings)
                     >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                            // Шестерёнка: внешнее кольцо обязательно, без него восемь спиц
-                            // читаются как солнце, а не как настройки
-                            <circle cx="12" cy="12" r="6.3" />
-                            <circle cx="12" cy="12" r="2.4" />
-                            <path d="M12 2.2v3.6M12 18.2v3.6M2.2 12h3.6M18.2 12h3.6M5.2 5.2l2.6 2.6M16.2 16.2l2.6 2.6M18.8 5.2l-2.6 2.6M7.8 16.2l-2.6 2.6" />
+                            // Шестерёнка макета — lucide settings. Своё «кольцо плюс восемь спиц»
+                            // на 20px читалось солнцем: спицы есть, зубьев нет.
+                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                            <circle cx="12" cy="12" r="3" />
                         </svg>
                     </button>
                     <button

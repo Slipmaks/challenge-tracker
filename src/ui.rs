@@ -58,7 +58,7 @@ fn Sheet(
 #[component]
 pub fn Ring(cur: Signal<Challenge>, today: NaiveDate) -> impl IntoView {
     view! {
-        <div class="ring-well pressed">
+        <div class="ring-well raised">
             // --p — один из ровно двух инлайн-стилей в проекте (второй --cols в DayGrid)
             <div class="ring" style=move || format!("--p:{}", cur.get().percent())>
                 <div class="ring-face">
@@ -94,7 +94,7 @@ pub fn DayGrid(cur: Signal<Challenge>, today: NaiveDate, on_toggle: Callback<Nai
                         let mut cls = String::from("day ");
                         cls.push_str(
                             if c.is_done(d) {
-                                "done pressed-sm"
+                                "done raised-sm"
                             } else if editable {
                                 "raised-sm"
                             } else {
@@ -178,7 +178,7 @@ pub fn CalendarSheet(
                                     // выпав из окна после Start over. Тапабельность — отдельно.
                                     cls.push_str(
                                         if c.is_done(d) {
-                                            "done pressed-sm"
+                                            "done raised-sm"
                                         } else if editable {
                                             "raised-sm"
                                         } else {
@@ -215,12 +215,25 @@ pub fn FinishSheet(
 ) -> impl IntoView {
     view! {
         <Sheet title="Challenge complete" on_close=on_close>
-            <p class="sub">
-                {move || {
-                    let c = cur.get();
-                    format!("{} of {} · best streak {}", c.done_count(), c.length, c.best_streak())
-                }}
-            </p>
+            <div class="summary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                    <path d="M4 22h16" />
+                    <path d="M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22" />
+                    <path d="M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8" />
+                    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+                </svg>
+                <div class="summary-score">
+                    {move || {
+                        let c = cur.get();
+                        format!("{} of {}", c.done_count(), c.length)
+                    }}
+                </div>
+                <div class="summary-streak">
+                    {move || format!("best streak {}", cur.get().best_streak())}
+                </div>
+            </div>
             <button class="btn raised" on:click=move |_| on_start_over.run(())>
                 "Start over"
             </button>
@@ -300,7 +313,7 @@ pub fn SettingsSheet(
             <div class="field">
                 <span class="field-label">"Name"</span>
                 <input
-                    class="input pressed-sm"
+                    class="input raised-sm"
                     type="text"
                     placeholder="Challenge name"
                     prop:value=move || name.get()
@@ -316,7 +329,7 @@ pub fn SettingsSheet(
                             view! {
                                 <button
                                     class=move || {
-                                        if length.get() == n { "pill on pressed-sm" } else { "pill raised-sm" }
+                                        if length.get() == n { "pill on raised-sm" } else { "pill raised-sm" }
                                     }
                                     on:click=move |_| set_length.set(n)
                                 >
@@ -326,12 +339,16 @@ pub fn SettingsSheet(
                         })
                         .collect_view()}
                     <input
-                        class="input pill-custom pressed-sm"
+                        class="input pill-custom raised-sm"
                         type="number"
                         min=MIN_LENGTH
                         max=MAX_LENGTH
                         placeholder="Custom"
-                        prop:value=move || length.get().to_string()
+                        // Пусто, пока длина совпадает с пилюлей: иначе рядом стоят «100» и «100»
+                        prop:value=move || match length.get() {
+                            30 | 60 | 100 => String::new(),
+                            n => n.to_string(),
+                        }
                         on:input=move |ev| {
                             if let Ok(n) = event_target_value(&ev).parse::<u32>() {
                                 set_length.set(n);
@@ -346,7 +363,7 @@ pub fn SettingsSheet(
                 // max: сдвинуть старт назад нужно (челлендж уже идёт), вперёд — нет.
                 // Это и убирает состояние «Day 0 of 30» по построению.
                 <input
-                    class="input pressed-sm"
+                    class="input raised-sm"
                     type="date"
                     max=today.to_string()
                     prop:value=move || start.get()
@@ -364,7 +381,7 @@ pub fn SettingsSheet(
                     view! {
                         // ponytail: data: URL вместо Blob + createObjectURL — тот же результат в одну строку
                         <a
-                            class="btn raised"
+                            class="btn-secondary raised-sm"
                             download="challenge.json"
                             href=move || {
                                 let json = serde_json::to_string(&cur.get()).unwrap_or_default();
@@ -383,7 +400,7 @@ pub fn SettingsSheet(
                 <span class="field-label">"Import JSON"</span>
                 // ponytail: textarea вместо FileReader и его async-обвязки
                 <textarea
-                    class="input pressed-sm"
+                    class="input raised-sm"
                     placeholder="Paste JSON here"
                     prop:value=move || paste.get()
                     on:input=move |ev| set_paste.set(event_target_value(&ev))
@@ -394,9 +411,9 @@ pub fn SettingsSheet(
                 {move || match confirm.get() {
                     Confirm::Overwrite => {
                         view! {
-                            <div class="confirm">
+                            <div class="confirm raised-sm">
                                 <span class="confirm-text">"Overwrite?"</span>
-                                <button class="btn-slim yes pressed-sm" on:click=move |_| apply_import()>
+                                <button class="btn-slim yes raised-sm" on:click=move |_| apply_import()>
                                     "Yes"
                                 </button>
                                 <button
@@ -411,7 +428,7 @@ pub fn SettingsSheet(
                     }
                     _ => {
                         view! {
-                            <button class="btn raised" on:click=import_click>
+                            <button class="btn-secondary raised-sm" on:click=import_click>
                                 "Import"
                             </button>
                         }
@@ -430,9 +447,9 @@ pub fn SettingsSheet(
                             // ни модалки над модалкой — один backdrop, один z-index.
                             Confirm::Reset => {
                                 view! {
-                                    <div class="confirm">
+                                    <div class="confirm raised-sm">
                                         <span class="confirm-text">"Sure?"</span>
-                                        <button class="btn-slim yes pressed-sm" on:click=reset>
+                                        <button class="btn-slim yes raised-sm" on:click=reset>
                                             "Yes"
                                         </button>
                                         <button
@@ -448,7 +465,7 @@ pub fn SettingsSheet(
                             _ => {
                                 view! {
                                     <button
-                                        class="btn raised"
+                                        class="btn-secondary danger raised-sm"
                                         on:click=move |_| set_confirm.set(Confirm::Reset)
                                     >
                                         "Reset everything"

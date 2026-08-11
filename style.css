@@ -13,12 +13,13 @@
   --r: 20px;
 }
 
-/* ── Три размера рельефа. Одна пара 6/12 на клетке 44px съедает саму клетку ── */
+/* ── Три размера рельефа, все выпуклые.
+   Рельеф кодирует нажимаемость, а не состояние: в макете 215 теней и ни одной inset.
+   Состояние даёт заливка --accent-tint + глиф --accent-ink, нажатие — :active scale.
+   Ярусов три потому, что одна пара 6/12 на клетке 44px съедает саму клетку. ── */
 
 .raised      { box-shadow:  6px  6px 12px var(--sh-dark), -6px -6px 12px var(--sh-light); }
-.pressed     { box-shadow: inset  6px  6px 12px var(--sh-dark), inset -6px -6px 12px var(--sh-light); }
 .raised-sm   { box-shadow:  4px  4px  8px var(--sh-dark), -4px -4px  8px var(--sh-light); }
-.pressed-sm  { box-shadow: inset  4px  4px  8px var(--sh-dark), inset -4px -4px  8px var(--sh-light); }
 .raised-flat { box-shadow:  2px  2px  4px var(--sh-dark), -2px -2px  4px var(--sh-light); }
 
 /* ── База ── */
@@ -34,6 +35,16 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Обязательно, а не для красоты: iOS даёт <button> метрики нативного push-button, а полям —
+   нативные внутренние отступы, и padding: 0 их не снимает. У квадратной клетки сетки этот
+   минимум превращается в минимальную ширину, 12 колонок перестают влезать в экран. */
+button,
+input,
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -47,7 +58,7 @@ button {
   max-width: 390px;
   min-height: 100dvh;
   margin: 0 auto;
-  padding: max(16px, env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  padding: max(16px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -55,7 +66,7 @@ button {
 
 .title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
   text-align: center;
 }
@@ -93,7 +104,7 @@ button {
   gap: 2px;
 }
 
-.ring-count  { font-size: 30px; font-weight: 700; }
+.ring-count  { font-size: 40px; font-weight: 600; }
 .ring-streak { font-size: 13px; color: var(--fg-muted); }
 
 .sub {
@@ -103,15 +114,13 @@ button {
   color: var(--fg-muted);
 }
 
-/* Подтягиваем строку под кольцо только на главном экране: в шите финиша та же строка
-   стоит обычным абзацем */
-.app .sub { margin-top: -16px; }
-
 /* ── Сетка челленджа. Число колонок от N, клетка всегда квадратная ── */
 
+/* minmax(0, 1fr), а не 1fr: 1fr == minmax(auto, 1fr) и не сжимается ниже минимального
+   содержимого дорожки, а aspect-ratio переносит минимум высоты в минимум ширины */
 .grid {
   display: grid;
-  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -119,6 +128,7 @@ button {
 
 .day {
   aspect-ratio: 1;
+  min-width: 0;
   border-radius: 14px;
   background: var(--bg);
   display: grid;
@@ -156,7 +166,7 @@ button {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .btn {
@@ -192,7 +202,6 @@ button {
 .icons {
   display: flex;
   justify-content: space-between;
-  padding: 0 24px;
 }
 
 .icon-btn {
@@ -205,7 +214,7 @@ button {
   transition: box-shadow 150ms, transform 150ms;
 }
 
-.icon-btn svg { width: 22px; height: 22px; }
+.icon-btn svg { width: 20px; height: 20px; }
 
 /* ── Bottom sheet ── */
 
@@ -229,10 +238,10 @@ button {
   /* Шит висит над затемнением: общей поверхности с фоном нет, пара неоморфных теней
      превратилась бы в грязь. Одна мягкая тень вниз. */
   box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.22);
-  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  padding: 24px 16px calc(32px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   animation: sheet-in 250ms ease-out;
 }
 
@@ -247,6 +256,20 @@ button {
 
 .sheet-title { margin: 0; font-size: 20px; font-weight: 600; }
 
+/* Итог финиша: трофей, крупный счёт, серия помельче */
+.summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  color: var(--accent);
+}
+
+.summary svg { width: 40px; height: 40px; }
+.summary-score { font-size: 32px; font-weight: 600; color: var(--fg); }
+.summary-streak { font-size: 14px; color: var(--fg-muted); }
+
 /* ── Поля, пилюли ── */
 
 .field { display: flex; flex-direction: column; gap: 8px; }
@@ -259,16 +282,20 @@ button {
   border-radius: 14px;
   background: var(--bg);
   color: var(--fg);
-  font: 17px/1 -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding: 0 16px;
+  font: 15px/1 -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 0 14px;
   width: 100%;
 }
 
 .input::placeholder { color: var(--fg-muted); }
 
+/* appearance: none стрелки type=number не убирает — они живут в теневом DOM */
+.input::-webkit-inner-spin-button,
+.input::-webkit-outer-spin-button { appearance: none; -webkit-appearance: none; margin: 0; }
+
 textarea.input {
   height: 88px;
-  padding: 12px 16px;
+  padding: 12px 14px;
   line-height: 1.4;
   resize: none;
 }
@@ -277,7 +304,10 @@ textarea.input {
 
 .pill {
   flex: 1;
+  /* Не 20px как у пилюли макета: там пилюля по содержимому, здесь flex: 1, и большой
+     боковой паддинг отбирает место у текста — «Custom» перестаёт влезать */
   height: 44px;
+  padding: 0 8px;
   border-radius: 14px;
   font-size: 15px;
   font-weight: 600;
@@ -289,29 +319,57 @@ textarea.input {
   color: var(--accent-ink);
 }
 
+/* Пилюли в макете по содержимому, здесь flex: 1 на всю ширину — в Custom нужно место для ввода */
 .pill-custom { flex: 1.4; padding: 0 12px; height: 44px; }
+
+/* Второстепенные действия шита: Export, Import, Reset everything. В макете это пилюли по
+   содержимому весом 400, а не полноразмерные кнопки — иначе у шита нет иерархии и Save
+   ничем не отличается от Export. */
+.btn-secondary {
+  align-self: flex-start;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--fg-muted);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  transition: box-shadow 150ms, transform 150ms;
+}
+
+.btn-secondary:active { transform: scale(0.95); }
+
+/* Сброс — то же второстепенное действие, но не приглушённое: защита не в цвете, а в подтверждении */
+.btn-secondary.danger { color: var(--fg); }
 
 .hint { font-size: 13px; color: var(--fg-muted); }
 
 /* Инлайн-подтверждение: кнопка на своём месте становится «… ?  Yes  No».
-   Ни window.confirm, ни модалки над модалкой. */
+   Ни window.confirm, ни модалки над модалкой. В макете это одна выпуклая плашка 48px
+   с вопросом и двумя чипами внутри, а не голый ряд кнопок. */
 .confirm {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 56px;
+  min-height: 48px;
+  border-radius: 14px;
+  padding: 0 8px 0 14px;
 }
 
-.confirm-text { flex: 1; font-size: 15px; font-weight: 600; }
+.confirm-text { flex: 1; font-size: 15px; }
 
 .btn-slim {
-  height: 44px;
-  min-width: 72px;
-  border-radius: 14px;
-  font-size: 15px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 14px;
   font-weight: 600;
   transition: box-shadow 150ms, transform 150ms, background-color 150ms;
 }
+
+.btn-slim:active { transform: scale(0.95); }
 
 .btn-slim.yes { background: var(--accent-tint); color: var(--accent-ink); }
 
@@ -323,11 +381,11 @@ textarea.input {
   justify-content: space-between;
 }
 
-.cal-month { font-size: 17px; font-weight: 600; }
+.cal-month { font-size: 16px; font-weight: 600; }
 
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -339,11 +397,13 @@ textarea.input {
 
 .cal-cell {
   aspect-ratio: 1;
+  min-width: 0;
   border-radius: 14px;
   background: var(--bg);
   display: grid;
   place-items: center;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 600;
   padding: 0;
   transition: box-shadow 150ms, transform 150ms, background-color 150ms;
 }
