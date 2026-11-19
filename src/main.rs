@@ -2,7 +2,7 @@ mod state;
 mod ui;
 
 use chrono::{Local, NaiveDate};
-use leptos::prelude::*;
+use leptos::{html, prelude::*};
 use state::{Challenge, load, save};
 use ui::{CalendarSheet, DayGrid, FinishSheet, Ring, SettingsSheet};
 
@@ -59,7 +59,23 @@ fn App() -> impl IntoView {
             }
         })
     });
-    let close = Callback::new(move |_: ()| set_sheet.set(Sheet::None));
+    // Фокус возвращается на кнопку, открывшую шит. Через кадр: пока шит не размонтирован,
+    // главный экран ещё inert, а в inert-поддерево фокус не ставится.
+    let settings_btn = NodeRef::<html::Button>::new();
+    let calendar_btn = NodeRef::<html::Button>::new();
+    let close = Callback::new(move |_: ()| {
+        let back = match sheet.get_untracked() {
+            Sheet::Settings => settings_btn,
+            Sheet::Calendar => calendar_btn,
+            Sheet::None => return,
+        };
+        set_sheet.set(Sheet::None);
+        request_animation_frame(move || {
+            if let Some(b) = back.get_untracked() {
+                let _ = b.focus();
+            }
+        });
+    });
     let noop = Callback::new(|_: ()| ());
     let dismiss_finish = Callback::new(move |_: ()| set_finish_seen.set(Some(finish_id())));
     // Флаг тут больше не нужен: после сдвига старта челлендж не завершён, и шит уходит сам
@@ -75,8 +91,15 @@ fn App() -> impl IntoView {
     // Третий случай кнопки: today вне диапазона — челлендж завершён либо ещё не начался
     let markable = move || challenge.get().is_some() && cur.get().is_editable(today, today);
 
+    let finish_open = move || {
+        challenge.get().is_some() && cur.get().is_finished(today) && finish_seen.get() != Some(finish_id())
+    };
+    // Под открытым шитом главный экран inert: Tab не уходит под затемнение, скринридер его не
+    // читает. Нативный атрибут вместо самодельной ловушки фокуса.
+    let sheet_open = move || challenge.get().is_none() || finish_open() || sheet.get() != Sheet::None;
+
     view! {
-        <div class="app">
+        <div class="app" inert=sheet_open>
             <h1 class="title">{move || cur.get().name}</h1>
 
             <Ring cur today />
@@ -103,6 +126,7 @@ fn App() -> impl IntoView {
                 <button
                     class=move || { if marked() { "btn marked raised" } else { "btn raised" } }
                     disabled=move || !markable()
+                    aria-pressed=move || if marked() { "true" } else { "false" }
                     on:click=move |_| toggle.run(today)
                 >
                     {move || if marked() { "Marked" } else { "Mark day" }}
@@ -110,6 +134,7 @@ fn App() -> impl IntoView {
                 <div class="icons">
                     <button
                         class="icon-btn raised-sm"
+                        node_ref=settings_btn
                         aria-label="Settings"
                         on:click=move |_| set_sheet.set(Sheet::Settings)
                     >
@@ -122,6 +147,7 @@ fn App() -> impl IntoView {
                     </button>
                     <button
                         class="icon-btn raised-sm"
+                        node_ref=calendar_btn
                         aria-label="Calendar"
                         on:click=move |_| set_sheet.set(Sheet::Calendar)
                     >
@@ -146,7 +172,7 @@ fn App() -> impl IntoView {
             if challenge.get().is_none() {
                 return None;
             }
-            if cur.get().is_finished(today) && finish_seen.get() != Some(finish_id()) {
+            if finish_open() {
                 return Some(
                     view! {
                         <FinishSheet cur on_start_over=start_over on_close=dismiss_finish />

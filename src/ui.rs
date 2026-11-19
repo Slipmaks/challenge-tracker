@@ -2,13 +2,14 @@
 
 use crate::state::{self, Challenge, MAX_LENGTH, MIN_LENGTH};
 use chrono::{Datelike, Duration, Months, NaiveDate};
-use leptos::prelude::*;
+use leptos::{html, prelude::*};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Confirm {
     None,
     Reset,
     Overwrite,
+    Apply,
 }
 
 /// Общая обёртка bottom sheet.
@@ -16,6 +17,10 @@ enum Confirm {
 /// Тап по затемнению закрывает, тап внутри панели — нет: клик внутри останавливается на самой
 /// панели и до затемнения не доходит. Иначе нативный `<input type="date">` закрывал бы шит
 /// прямо во время выбора даты.
+///
+/// Для скринридера и клавиатуры это диалог: фокус при открытии уходит в панель, Esc закрывает
+/// так же, как X. Главный экран под затемнением в это время `inert` (main.rs). id заголовка
+/// один на всех: открыт всегда ровно один шит.
 #[component]
 fn Sheet(
     #[prop(into)] title: String,
@@ -23,11 +28,29 @@ fn Sheet(
     on_close: Callback<()>,
     children: Children,
 ) -> impl IntoView {
+    let panel = NodeRef::<html::Div>::new();
+    Effect::new(move |_| {
+        if let Some(p) = panel.get() {
+            let _ = p.focus();
+        }
+    });
     view! {
-        <div class="backdrop" on:click=move |_| if closable { on_close.run(()) }>
-            <div class="sheet" on:click=|ev| ev.stop_propagation()>
+        <div
+            class="backdrop"
+            on:click=move |_| if closable { on_close.run(()) }
+            on:keydown=move |ev| if closable && ev.key() == "Escape" { on_close.run(()) }
+        >
+            <div
+                class="sheet"
+                node_ref=panel
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="sheet-title"
+                tabindex="-1"
+                on:click=|ev| ev.stop_propagation()
+            >
                 <div class="sheet-head">
-                    <h2 class="sheet-title">{title}</h2>
+                    <h2 class="sheet-title" id="sheet-title">{title}</h2>
                     {closable
                         .then(|| {
                             view! {
@@ -53,6 +76,74 @@ fn Sheet(
             </div>
         </div>
     }
+}
+
+/// Инлайн-подтверждение: кнопка на своём месте становится плашкой «вопрос · да · нет».
+/// Кнопка, которой задали вопрос, исчезла из DOM вместе с фокусом — фокус переезжает на
+/// безопасный ответ. Это же прокручивает плашку в видимую часть шита на коротком экране.
+/// `big` — плашка на месте главной кнопки 56px, а не второстепенной 48px.
+#[component]
+fn ConfirmRow(
+    #[prop(into)] text: TextProp,
+    #[prop(default = "Yes")] yes: &'static str,
+    #[prop(default = "No")] no: &'static str,
+    #[prop(optional)] big: bool,
+    on_yes: Callback<()>,
+    on_no: Callback<()>,
+) -> impl IntoView {
+    let safe = NodeRef::<html::Button>::new();
+    Effect::new(move |_| {
+        if let Some(b) = safe.get() {
+            let _ = b.focus();
+        }
+    });
+    view! {
+        <div class=if big { "confirm big raised" } else { "confirm raised-sm" }>
+            // role=alert: фокус стоит на «No», и без этого скринридер не прочитал бы сам вопрос
+            <span class="confirm-text" role="alert">{move || text.get()}</span>
+            // Тинт — у безопасного ответа, а не у «да»: тинт значит «выбрано», и выбран тут
+            // ответ по умолчанию — тот, на котором фокус. Цвет и фокус говорят одно и то же.
+            <button class="btn-slim raised-sm" on:click=move |_| on_yes.run(())>{yes}</button>
+            <button class="btn-slim safe raised-sm" node_ref=safe on:click=move |_| on_no.run(())>{no}</button>
+        </div>
+    }
+}
+
+/// Вид клетки дня — одно правило для сетки и календаря. Четыре состояния различаются формой,
+/// а не только тенью: галочка — выполнено, точка — пропущено, плоская обводка — нельзя менять
+/// (будущее или вне окна), чистый рельеф — сегодня, ещё не отмечено.
+fn day_class(c: &Challenge, d: NaiveDate, today: NaiveDate) -> String {
+    let mut cls = String::from(if c.is_done(d) {
+        "done raised-sm"
+    } else if !c.is_editable(d, today) {
+        "off"
+    } else if d < today {
+        "missed raised-sm"
+    } else {
+        "raised-sm"
+    });
+    if d == today {
+        cls.push_str(" today");
+    }
+    cls
+}
+
+/// Имя клетки для скринридера: у клетки сетки нет текста вовсе, у календарной — одно число.
+/// «Выполнено» говорит aria-pressed, поэтому в имени только дата и то, чего pressed не скажет.
+fn day_label(d: NaiveDate, today: NaiveDate) -> String {
+    let mut s = d.format("%B %-d").to_string();
+    if d == today {
+        s.push_str(", today");
+    } else if d > today {
+        s.push_str(", upcoming");
+    }
+    s
+}
+
+/// aria-pressed у дня, который был или может быть отмечен; у будущего его нет вовсе.
+fn day_pressed(c: &Challenge, d: NaiveDate, today: NaiveDate) -> Option<&'static str> {
+    let done = c.is_done(d);
+    (done || c.is_editable(d, today)).then_some(if done { "true" } else { "false" })
 }
 
 #[component]
@@ -81,33 +172,34 @@ pub fn Ring(cur: Signal<Challenge>, today: NaiveDate) -> impl IntoView {
 pub fn DayGrid(cur: Signal<Challenge>, today: NaiveDate, on_toggle: Callback<NaiveDate>) -> impl IntoView {
     view! {
         <div
-            // dense с 12 колонок: на 9 колонках клетка ещё 32px и галочка в неё влезает
-            class=move || { if cur.get().cols() >= 12 { "grid dense" } else { "grid" } }
+            // overview — сетка, по которой не тапают (> 35 дней): плоская, см. style.css.
+            // dense — с 12 колонок: клетка мельче, зазор и скругление 4.
+            class=move || {
+                let c = cur.get();
+                let mut cls = String::from("grid");
+                if !c.grid_tappable() {
+                    cls.push_str(" overview");
+                }
+                if c.cols() >= 12 {
+                    cls.push_str(" dense");
+                }
+                cls
+            }
             style=move || format!("--cols:{}", cur.get().cols())
+            role="group"
+            aria-label="Days"
         >
             {move || {
                 let c = cur.get();
                 (0..c.length)
                     .map(|i| {
                         let d = c.start + Duration::days(i as i64);
-                        let editable = c.is_editable(d, today);
-                        let mut cls = String::from("day ");
-                        cls.push_str(
-                            if c.is_done(d) {
-                                "done raised-sm"
-                            } else if editable {
-                                "raised-sm"
-                            } else {
-                                "raised-flat"
-                            },
-                        );
-                        if d == today {
-                            cls.push_str(" today");
-                        }
                         view! {
                             <button
-                                class=cls
-                                disabled=!(editable && c.grid_tappable())
+                                class=format!("day {}", day_class(&c, d, today))
+                                aria-label=day_label(d, today)
+                                aria-pressed=day_pressed(&c, d, today)
+                                disabled=!(c.is_editable(d, today) && c.grid_tappable())
                                 on:click=move |_| on_toggle.run(d)
                             />
                         }
@@ -147,7 +239,9 @@ pub fn CalendarSheet(
                         <path d="M15 5l-7 7 7 7" />
                     </svg>
                 </button>
-                <span class="cal-month">{move || month.get().format("%B %Y").to_string()}</span>
+                <span class="cal-month" aria-live="polite">
+                    {move || month.get().format("%B %Y").to_string()}
+                </span>
                 <button class="icon-btn raised-sm" aria-label="Next month" on:click=move |_| shift(true)>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <path d="M9 5l7 7-7 7" />
@@ -172,26 +266,15 @@ pub fn CalendarSheet(
                             (0..days)
                                 .map(|i| {
                                     let d = m + Duration::days(i);
-                                    let editable = c.is_editable(d, today);
-                                    let mut cls = String::from("cal-cell ");
-                                    // Заливка выигрывает у диапазона: день из done виден даже
-                                    // выпав из окна после Start over. Тапабельность — отдельно.
-                                    cls.push_str(
-                                        if c.is_done(d) {
-                                            "done raised-sm"
-                                        } else if editable {
-                                            "raised-sm"
-                                        } else {
-                                            "off raised-flat"
-                                        },
-                                    );
-                                    if d == today {
-                                        cls.push_str(" today");
-                                    }
+                                    // Заливка выигрывает у диапазона (day_class проверяет done
+                                    // первым): день из done виден даже выпав из окна после
+                                    // Start over. Тапабельность — отдельно, is_editable.
                                     view! {
                                         <button
-                                            class=cls
-                                            disabled=!editable
+                                            class=format!("cal-cell {}", day_class(&c, d, today))
+                                            aria-label=day_label(d, today)
+                                            aria-pressed=day_pressed(&c, d, today)
+                                            disabled=!c.is_editable(d, today)
                                             on:click=move |_| on_toggle.run(d)
                                         >
                                             {d.day()}
@@ -213,10 +296,12 @@ pub fn FinishSheet(
     on_start_over: Callback<()>,
     on_close: Callback<()>,
 ) -> impl IntoView {
+    // Start over обнуляет все числа на экране, а это единственная кнопка шита — спрашиваем
+    let (asking, set_asking) = signal(false);
     view! {
         <Sheet title="Challenge complete" on_close=on_close>
             <div class="summary">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                     <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
                     <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
                     <path d="M4 22h16" />
@@ -234,9 +319,26 @@ pub fn FinishSheet(
                     {move || format!("best streak {}", cur.get().best_streak())}
                 </div>
             </div>
-            <button class="btn raised" on:click=move |_| on_start_over.run(())>
-                "Start over"
-            </button>
+            {move || {
+                if asking.get() {
+                    view! {
+                        <ConfirmRow
+                            text="Start over from today? History stays."
+                            big=true
+                            on_yes=on_start_over
+                            on_no=Callback::new(move |_| set_asking.set(false))
+                        />
+                    }
+                        .into_any()
+                } else {
+                    view! {
+                        <button class="btn raised" on:click=move |_| set_asking.set(true)>
+                            "Start over"
+                        </button>
+                    }
+                        .into_any()
+                }
+            }}
         </Sheet>
     }
 }
@@ -261,17 +363,22 @@ pub fn SettingsSheet(
     let (confirm, set_confirm) = signal(Confirm::None);
     let (import_open, set_import_open) = signal(false);
 
+    // Челлендж, каким он станет после сохранения: поля формы поверх текущего
+    let edited = move || {
+        let mut c = cur.get_untracked();
+        c.name = name.get_untracked();
+        c.length = length.get_untracked();
+        c.start = NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(c.start);
+        c.sanitize(today)
+    };
+
     // Настройки правят существующий челлендж и только его. Если челленджа нет — снесли через
     // Reset everything — закрытие шита не должно воскрешать его из полей формы: старый старт
     // плюс короткая длина дают мгновенный Finished с пустым done.
-    let commit = move || {
+    let commit = move |c: Challenge| {
         set_challenge.update(|slot| {
-            if let Some(mut c) = slot.take() {
-                c.name = name.get_untracked();
-                c.length = length.get_untracked();
-                c.start =
-                    NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(c.start);
-                *slot = Some(c.sanitize(today));
+            if slot.is_some() {
+                *slot = Some(c);
             }
         });
     };
@@ -288,14 +395,40 @@ pub fn SettingsSheet(
         )));
     };
 
-    // Закрытие и есть сохранение: кнопки Save в макете настроек нет, а другого выхода из шита,
-    // кроме X и тапа по затемнению, дизайн не предусматривает — «отмены» тут просто нет.
-    // Импорт и сброс закрываются НЕ через это, им нужен сырой on_close: иначе поверх свежих
-    // данных лягут старые значения полей формы.
-    let close = Callback::new(move |_| {
-        commit();
+    // Сохраняет только Done. X, тап по затемнению и Esc — отмена, как везде: раньше закрытие и
+    // было сохранением, и Esc, который на любой платформе значит «отмена», молча записывал
+    // правку. Правка, которая отнимает прогресс (edit_warning), и на Done не проходит молча:
+    // кнопка на своём месте становится вопросом Apply / Keep.
+    // Импорт и сброс сохраняют сами и закрывают шит сырым on_close, мимо Done: иначе поверх
+    // свежих данных легли бы старые значения полей формы.
+    let done = Callback::new(move |_| {
+        let c = edited();
+        if cur.get_untracked().edit_warning(&c, today).is_some() {
+            set_confirm.set(Confirm::Apply);
+            return;
+        }
+        commit(c);
         on_close.run(());
     });
+    let apply = Callback::new(move |_| {
+        commit(edited());
+        on_close.run(());
+    });
+    // Keep откатывает только опасное — длину и старт; новое имя сохраняется
+    let keep = Callback::new(move |_| {
+        let mut c = cur.get_untracked();
+        c.name = name.get_untracked();
+        commit(c.sanitize(today));
+        on_close.run(());
+    });
+    let cancel = Callback::new(move |_| set_confirm.set(Confirm::None));
+    let warning = move || {
+        length.track();
+        start.track();
+        (confirm.get() == Confirm::Apply)
+            .then(|| cur.get_untracked().edit_warning(&edited(), today))
+            .flatten()
+    };
 
     let parsed = move || serde_json::from_str::<Challenge>(&paste.get_untracked()).ok();
 
@@ -318,19 +451,21 @@ pub fn SettingsSheet(
         }
     };
 
-    let reset = move |_| {
+    let reset = Callback::new(move |_| {
         state::clear();
         set_challenge.set(None);
         on_close.run(());
-    };
+    });
 
     view! {
         <Sheet
             title=if first_run { "New challenge" } else { "Settings" }
             closable=!first_run
-            on_close=close
+            on_close=on_close
         >
-            <div class="field">
+            // <label>, а не <div>: подпись над полем — она же его имя для скринридера. У длины
+            // внутри кнопки, а кнопку в label класть нельзя, поэтому там group с тем же именем.
+            <label class="field">
                 <span class="field-label">"Name"</span>
                 <input
                     class="input raised-sm"
@@ -339,10 +474,10 @@ pub fn SettingsSheet(
                     prop:value=move || name.get()
                     on:input=move |ev| set_name.set(event_target_value(&ev))
                 />
-            </div>
+            </label>
 
-            <div class="field">
-                <span class="field-label">"Length"</span>
+            <div class="field" role="group" aria-label="Length">
+                <span class="field-label" aria-hidden="true">"Length"</span>
                 <div class="pills">
                     {[30u32, 60, 100]
                         .map(|n| {
@@ -351,6 +486,7 @@ pub fn SettingsSheet(
                                     class=move || {
                                         if length.get() == n { "pill on raised-sm" } else { "pill raised-sm" }
                                     }
+                                    aria-pressed=move || if length.get() == n { "true" } else { "false" }
                                     on:click=move |_| set_length.set(n)
                                 >
                                     {n}
@@ -364,6 +500,7 @@ pub fn SettingsSheet(
                         min=MIN_LENGTH
                         max=MAX_LENGTH
                         placeholder="Custom"
+                        aria-label="Custom length"
                         // Пусто, пока длина совпадает с пилюлей: иначе рядом стоят «100» и «100»
                         prop:value=move || match length.get() {
                             30 | 60 | 100 => String::new(),
@@ -378,7 +515,7 @@ pub fn SettingsSheet(
                 </div>
             </div>
 
-            <div class="field">
+            <label class="field">
                 <span class="field-label">"Start date"</span>
                 // max: сдвинуть старт назад нужно (челлендж уже идёт), вперёд — нет.
                 // Это и убирает состояние «Day 0 of 30» по построению.
@@ -389,14 +526,16 @@ pub fn SettingsSheet(
                     prop:value=move || start.get()
                     on:input=move |ev| set_start.set(event_target_value(&ev))
                 />
-            </div>
+            </label>
 
+            // Группы шита разведены воздухом, а не линиями: внутри группы 20, между — 32 (.sep).
+            // Челлендж | бэкап | сброс | Done. В онбординге групп меньше, и он остаётся макетным.
             {(!first_run)
                 .then(|| {
                     view! {
                         // ponytail: data: URL вместо Blob + createObjectURL — тот же результат в одну строку
                         <a
-                            class="btn-secondary raised-sm"
+                            class="btn-secondary raised-sm sep"
                             download="challenge.json"
                             href=move || {
                                 let json = serde_json::to_string(&cur.get()).unwrap_or_default();
@@ -430,33 +569,25 @@ pub fn SettingsSheet(
                 <div class="field">
                     <span class="field-label">"Import JSON"</span>
                     // ponytail: textarea вместо FileReader и его async-обвязки
+                    // aria-label, а не label-обёртка: рядом кнопки Import/Yes/No, а им в label нельзя
                     <textarea
                         class="input raised-sm"
                         placeholder="Paste JSON here"
+                        aria-label="Import JSON"
                         prop:value=move || paste.get()
                         on:input=move |ev| set_paste.set(event_target_value(&ev))
                     />
                     <Show when=move || bad_json.get()>
-                        <span class="hint">"Invalid JSON"</span>
+                        <span class="hint" role="alert">"Invalid JSON"</span>
                     </Show>
                     {move || match confirm.get() {
                         Confirm::Overwrite => {
                             view! {
-                                <div class="confirm raised-sm">
-                                    <span class="confirm-text">"Overwrite?"</span>
-                                    <button
-                                        class="btn-slim yes raised-sm"
-                                        on:click=move |_| apply_import()
-                                    >
-                                        "Yes"
-                                    </button>
-                                    <button
-                                        class="btn-slim raised-sm"
-                                        on:click=move |_| set_confirm.set(Confirm::None)
-                                    >
-                                        "No"
-                                    </button>
-                                </div>
+                                <ConfirmRow
+                                    text="Overwrite?"
+                                    on_yes=Callback::new(move |_| apply_import())
+                                    on_no=cancel
+                                />
                             }
                                 .into_any()
                         }
@@ -472,8 +603,8 @@ pub fn SettingsSheet(
                 </div>
             </Show>
 
-            // Главное действие онбординга стоит внизу, в зоне большого пальца. В настройках
-            // такой кнопки нет вообще: там сохраняет закрытие шита.
+            // Главное действие стоит внизу, в зоне большого пальца: Start в онбординге, Done в
+            // настройках. Один и тот же ярус кнопки — шит говорит одним языком в обоих режимах.
             {first_run
                 .then(|| {
                     view! {
@@ -492,38 +623,56 @@ pub fn SettingsSheet(
             {(!first_run)
                 .then(|| {
                     view! {
-                        {move || match confirm.get() {
-                            // Подтверждение внутри той же панели: ни window.confirm,
-                            // ни модалки над модалкой — один backdrop, один z-index.
-                            Confirm::Reset => {
-                                view! {
-                                    <div class="confirm raised-sm">
-                                        <span class="confirm-text">"Reset everything?"</span>
-                                        <button class="btn-slim yes raised-sm" on:click=reset>
-                                            "Yes"
-                                        </button>
+                        // Сброс — своя группа: прямо под Import он читался как третья операция
+                        // бэкапа, а это единственное действие, которое стирает всё
+                        <div class="sep">
+                            {move || match confirm.get() {
+                                // Подтверждение внутри той же панели: ни window.confirm,
+                                // ни модалки над модалкой — один backdrop, один z-index.
+                                Confirm::Reset => {
+                                    view! {
+                                        <ConfirmRow text="Reset everything?" on_yes=reset on_no=cancel />
+                                    }
+                                        .into_any()
+                                }
+                                _ => {
+                                    view! {
                                         <button
-                                            class="btn-slim raised-sm"
-                                            on:click=move |_| set_confirm.set(Confirm::None)
+                                            class="btn-secondary danger raised-sm"
+                                            on:click=move |_| set_confirm.set(Confirm::Reset)
                                         >
-                                            "No"
+                                            "Reset everything"
                                         </button>
-                                    </div>
+                                    }
+                                        .into_any()
                                 }
-                                    .into_any()
-                            }
-                            _ => {
-                                view! {
-                                    <button
-                                        class="btn-secondary danger raised-sm"
-                                        on:click=move |_| set_confirm.set(Confirm::Reset)
-                                    >
-                                        "Reset everything"
-                                    </button>
+                            }}
+                        </div>
+                        // Done на своём месте становится вопросом, если правка отнимает прогресс.
+                        // Текст живой: поправил длину при открытом вопросе — вопрос пересчитался
+                        // или вернулся Done. Show, а не if: плашка не пересоздаётся на каждую
+                        // цифру в Custom и не уводит фокус из поля.
+                        <div class="sep">
+                            <Show
+                                when=move || warning().is_some()
+                                fallback=move || {
+                                    view! {
+                                        <button class="btn raised" on:click=move |_| done.run(())>
+                                            "Done"
+                                        </button>
+                                    }
                                 }
-                                    .into_any()
-                            }
-                        }}
+                            >
+                                <ConfirmRow
+                                    text=move || warning().unwrap_or_default()
+                                    yes="Apply"
+                                    no="Keep"
+                                    big=true
+                                    on_yes=apply
+                                    on_no=keep
+                                />
+                            </Show>
+                        </div>
                     }
                 })}
         </Sheet>

@@ -7,8 +7,8 @@
 <title>Challenge Tracker</title>
 
 <script type="module">
-import init, * as bindings from '/challenge-tracker/challenge-tracker-a8acbfc4653316ea.js';
-const wasm = await init({ module_or_path: '/challenge-tracker/challenge-tracker-a8acbfc4653316ea_bg.wasm' });
+import init, * as bindings from '/challenge-tracker/challenge-tracker-c8451846d82cfc77.js';
+const wasm = await init({ module_or_path: '/challenge-tracker/challenge-tracker-c8451846d82cfc77_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -17,13 +17,13 @@ window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
-<link rel="stylesheet" href="/challenge-tracker/style-c29a70490e6fc4bb.css" integrity="sha384-k0e+dzGSTPcD/7z4BSiysoZK2zCP/g+XegKALIpfJAff0ZjAYpqrCuIX1YASqsPM"/>
+<link rel="stylesheet" href="/challenge-tracker/style-e5c52603c8c7d1b9.css" integrity="sha384-Rr6i4PeznN+qwlF+oVoUpncRvltMfWnpiYrZZbjjjLIPe48PxZBvBYh4FQajsONO"/>
 <!-- target-path=".": sw.js обязан лежать в корне, иначе его scope не покроет приложение -->
 
 <link rel="manifest" href="manifest.json">
 <!-- iOS для «Добавить на домашний экран» берёт apple-touch-icon и SVG не принимает -->
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="modulepreload" href="/challenge-tracker/challenge-tracker-a8acbfc4653316ea.js" crossorigin="anonymous" integrity="sha384-MTWta/fu+35Rmw/aNUtZ8U2Xy7bP1+ybKsudtEIks+nsvJS1w7ifQAzU5RYWmzAU"><link rel="preload" href="/challenge-tracker/challenge-tracker-a8acbfc4653316ea_bg.wasm" crossorigin="anonymous" integrity="sha384-0UzkxFHML25M9QfBnxREwBiToGxIhTh2Vn602Qwycf3+Ad+leFbtw31YTOWhZ6TF" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="/challenge-tracker/challenge-tracker-c8451846d82cfc77.js" crossorigin="anonymous" integrity="sha384-7HJCUvCHmNaPxgipS3lONDeofi3JH8U0FlPSTMzqQqOI26tmtBmuMLLAjN6/z6X4"><link rel="preload" href="/challenge-tracker/challenge-tracker-c8451846d82cfc77_bg.wasm" crossorigin="anonymous" integrity="sha384-41VN2yZ5FUU9HCm/BvvqAY1ay3YbZrMKh0enkgGSGvxmXPDqVniHUgoS8APNZaK0" as="fetch" type="application/wasm"></head>
 <body>
 <script>
   // Путь относительный: под /challenge-tracker/ регистрация даст /challenge-tracker/sw.js,

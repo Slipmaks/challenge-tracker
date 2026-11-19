@@ -110,6 +110,18 @@ impl Challenge {
         best
     }
 
+    /// Вопрос перед сохранением настроек, если правка отнимает видимый прогресс: челлендж
+    /// завершится или отмеченные дни выпадут из окна. None — правка безопасна и сохраняется
+    /// молча. Закрытие шита и есть сохранение, а тап мимо шита — самый частый случайный жест:
+    /// без этого вопроса тап по пилюле «30» на 41-м дне из 100 ставил ложный финиш.
+    pub fn edit_warning(&self, edited: &Challenge, today: NaiveDate) -> Option<String> {
+        if edited.is_finished(today) && !self.is_finished(today) {
+            return Some(format!("End the challenge at day {}?", edited.length));
+        }
+        let lost = self.done_count().saturating_sub(edited.done_count());
+        (lost > 0).then(|| format!("{lost} marked day{} won't count", if lost == 1 { "" } else { "s" }))
+    }
+
     /// Число колонок от N: клетка всегда квадратная и сетка всегда влезает в экран.
     /// Ниже 40px клетка перестаёт быть кнопкой — правка прошлого уходит в календарь.
     ///
@@ -292,6 +304,35 @@ mod tests {
         assert_eq!(c.done_count(), 0, "но в окно нового челленджа она не попадает");
         assert_eq!(c.best_streak(), 0);
         assert_eq!(c.day_number(today), 1);
+    }
+
+    #[test]
+    fn settings_ask_only_when_progress_would_be_hidden() {
+        let today = d(TODAY);
+        let c = mock(); // день 17 из 30, выполнено 13
+        let mut shorter = c.clone();
+        shorter.length = 10;
+        assert_eq!(c.edit_warning(&shorter, today).as_deref(), Some("End the challenge at day 10?"));
+        let mut later = c.clone();
+        later.start = c.start + Duration::days(2); // дни 1 и 2 выпадают из окна
+        assert_eq!(c.edit_warning(&later, today).as_deref(), Some("2 marked days won't count"));
+        let mut one = c.clone();
+        one.start = c.start + Duration::days(1);
+        assert_eq!(c.edit_warning(&one, today).as_deref(), Some("1 marked day won't count"));
+        // Безопасные правки — молча: длиннее, имя, старт раньше («начал ещё до установки»)
+        let mut longer = c.clone();
+        longer.length = 60;
+        longer.name = "y".into();
+        assert_eq!(c.edit_warning(&longer, today), None);
+        let mut earlier = c.clone();
+        earlier.start = c.start - Duration::days(3);
+        assert_eq!(c.edit_warning(&earlier, today), None);
+        // Уже завершённый челлендж удлиняют без вопросов
+        let mut done = mock();
+        done.length = 10;
+        let mut back = done.clone();
+        back.length = 30;
+        assert_eq!(done.edit_warning(&back, today), None);
     }
 
     #[test]

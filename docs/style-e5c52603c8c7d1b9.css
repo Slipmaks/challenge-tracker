@@ -13,14 +13,16 @@
   --r: 20px;
 }
 
-/* ── Три размера рельефа, все выпуклые.
+/* ── Два размера рельефа, оба выпуклые.
    Рельеф кодирует нажимаемость, а не состояние: в макете 215 теней и ни одной inset.
    Состояние даёт заливка --accent-tint + глиф --accent-ink, нажатие — :active scale.
-   Ярусов три потому, что одна пара 6/12 на клетке 44px съедает саму клетку. ── */
+   Ярусов два потому, что одна пара 6/12 на клетке 44px съедает саму клетку.
+   Третьего, почти погашенного яруса больше нет: у клетки без цифры видна только тень, и
+   «тень 2/4» против «тени 4/8» не отличалась на глаз — будущее выглядело пропуском.
+   Неактивный день теперь плоский, с обводкой (.off ниже). ── */
 
 .raised      { box-shadow:  6px  6px 12px var(--sh-dark), -6px -6px 12px var(--sh-light); }
 .raised-sm   { box-shadow:  4px  4px  8px var(--sh-dark), -4px -4px  8px var(--sh-light); }
-.raised-flat { box-shadow:  2px  2px  4px var(--sh-dark), -2px -2px  4px var(--sh-light); }
 
 /* ── База ── */
 
@@ -34,6 +36,14 @@ body {
   font: 16px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Кольцо фокуса из палитры, а не браузерное. Акцент к --bg 3:1 — порог для индикатора.
+   Снаружи, с зазором: внутри клетки «сегодня» уже живёт своя акцентная рамка. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Панель шита получает фокус программно, чтобы скринридер объявил диалог; рамка вокруг
+   всего шита — шум */
+.sheet:focus-visible { outline: none; }
 
 /* Обязательно, а не для красоты: iOS даёт <button> метрики нативного push-button, а полям —
    нативные внутренние отступы, и padding: 0 их не снимает. У квадратной клетки сетки этот
@@ -54,6 +64,8 @@ button {
   touch-action: manipulation;
 }
 
+button:disabled { cursor: default; }
+
 .app {
   max-width: 390px;
   min-height: 100dvh;
@@ -73,6 +85,15 @@ button {
 
 /* ── Кольцо. CSS, без SVG: --p приходит инлайн-стилем ── */
 
+/* Регистрация типа делает --p анимируемым: без неё conic-gradient прыгает, а с ней дуга
+   доезжает до нового значения. Это и есть отклик на ежедневный тап. Срабатывает только на
+   изменение — при открытии приложения кольцо не крутится. */
+@property --p {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 .ring-well {
   width: 220px;
   height: 220px;
@@ -89,6 +110,7 @@ button {
   display: grid;
   place-items: center;
   background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--track) 0);
+  transition: --p 600ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Внутренний круг цвета фона превращает диск в кольцо толщиной 14px */
@@ -152,13 +174,47 @@ button {
   transform: rotate(-45deg) translate(1px, -1px);
 }
 
-/* На плотных ярусах клетка меньше галочки — остаётся только заливка */
-.grid.dense .day.done::after { display: none; }
+/* Обзорная сетка (> 35 дней, .overview) — не кнопки: ни одна клетка не нажимается, поэтому
+   рельефа нет ни у одной. Граница ровно там же, где отключается тап (grid_tappable), а не на
+   12 колонках: иначе 36–63 дня выглядели выпуклыми и нажимаемыми, а тап ничего не делал.
+   Без рельефа клетка сама становится глифом — заливка цветом галочки: тинт к --bg 1.06:1
+   держится только рядом с галочкой, --accent-ink даёт 5.2:1. Правило одно: тинт + галочка —
+   «нажато» на рельефе, сплошная заливка — «сделано» на плоском обзоре. */
+.grid.overview .day.done::after { display: none; }
+.grid.overview .day { box-shadow: none; border: 1px solid var(--track); }
+.grid.overview .day.done { background: var(--accent-ink); border-color: var(--accent-ink); }
+.grid.overview .day.today { border: 2px solid var(--accent); }
 
-/* Будущее и всё вне [start, start+N) гасится рельефом (.raised-flat), а не прозрачностью:
-   opacity 0.45 на клетке, у которой видна только тень, почти не отличима от пропущенного дня. */
+/* Пропущенный день — точка: третья форма рядом с галочкой и пустотой. Нейтральная, не
+   красная — пропуск можно исправить, а не стыдиться. */
+.day.missed::after,
+.cal-cell.missed::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+}
 
-.day.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grid.dense .day.missed::after { width: 4px; height: 4px; }
+
+/* Неактивный день — будущее и всё вне [start, start+N) — плоский, с обводкой: рельеф значит
+   «можно нажать», а сюда нажать нельзя. Не прозрачность: opacity на клетке, у которой видна
+   только тень, делает её неотличимой от пропуска. */
+.day.off,
+.cal-cell.off { border: 1px solid var(--track); }
+
+/* Рамка «сегодня» — border, а не outline: outline занят кольцом фокуса */
+.day.today { border: 2px solid var(--accent); }
+
+/* Отклик на отметку: галочка сегодняшнего дня и кнопки впрыгивает вместе с доездом дуги.
+   Только сегодня — иначе при каждом открытии впрыгивали бы все галочки сетки разом. */
+.day.today.done::after,
+.btn.marked::before { animation: tick 280ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes tick {
+  from { opacity: 0; transform: rotate(-45deg) translate(1px, -1px) scale(0.4); }
+}
 
 /* ── Кнопки ── */
 
@@ -180,8 +236,10 @@ button {
   justify-content: center;
   gap: 8px;
   transition: box-shadow 150ms, transform 150ms, background-color 150ms;
-  /* Export — это <a download>, а не button: без этого он выглядит синей ссылкой с подчёркиванием */
-  color: var(--fg);
+  /* Главное действие подписано цветом галочки, а не залито: заливка значит «сделано», а
+     подпись --accent-ink (5.2:1) отличает Mark day, Start, Done от второстепенных плашек тем же
+     языком, не ломая рельеф. Одна громкая точка — по-прежнему дуга кольца. */
+  color: var(--accent-ink);
   text-decoration: none;
 }
 
@@ -190,7 +248,13 @@ button {
   color: var(--accent-ink);
 }
 
-.btn:disabled { opacity: 0.45; cursor: default; }
+/* Недоступная главная кнопка — плоская, как недоступный день: рельеф значит «можно нажать».
+   Не прозрачность: opacity 0.45 уводила подпись к 2.2:1 и оставляла выпуклую подушку. */
+.btn:disabled {
+  box-shadow: none;
+  border: 1px solid var(--track);
+  color: var(--fg-muted);
+}
 
 /* :active — мгновение, .pressed — состояние. Разведены намеренно */
 .btn:not(:disabled):active,
@@ -391,12 +455,15 @@ textarea.input {
   gap: 8px;
   min-height: 48px;
   border-radius: 14px;
-  padding: 0 14px;
+  /* Вертикальный паддинг однострочной плашке не мешает (18 + 16 < 48, высота макетная),
+     а вопросу в две строки не даёт лечь на край */
+  padding: 8px 14px;
 }
 
 .confirm-text { flex: 1; font-size: 15px; }
 
 .btn-slim {
+  position: relative;
   height: 32px;
   padding: 0 14px;
   border-radius: 10px;
@@ -405,9 +472,21 @@ textarea.input {
   transition: box-shadow 150ms, transform 150ms, background-color 150ms;
 }
 
+/* Чип макетный, 32px, а палец — нет: зона нажатия добирается до 44 невидимым полем.
+   По горизонтали не расширяем — между Yes и No всего 8px. */
+.btn-slim::after { content: ""; position: absolute; inset: -6px 0; }
+
+/* Плашка на месте главной кнопки (Start over) — её высоты и скругления, а не второстепенной */
+.confirm.big { min-height: 56px; border-radius: var(--r); }
+
 .btn-slim:active { transform: scale(0.95); }
 
-.btn-slim.yes { background: var(--accent-tint); color: var(--accent-ink); }
+/* Тинт у безопасного ответа (No, Keep) — он же выбран по умолчанию и держит фокус. Как у iOS,
+   где в разрушительном вопросе выделена отмена. */
+.btn-slim.safe { background: var(--accent-tint); color: var(--accent-ink); }
+
+/* Группы шита настроек: внутри 20 (gap шита), между группами 32 */
+.sheet > .sep { margin-top: 12px; }
 
 /* ── Календарь ── */
 
@@ -441,8 +520,12 @@ textarea.input {
   font-size: 14px;
   font-weight: 600;
   padding: 0;
+  position: relative;
   transition: box-shadow 150ms, transform 150ms, background-color 150ms;
 }
+
+/* Точка пропуска под числом, а не вместо него: в календаре дата главнее */
+.cal-cell.missed::after { position: absolute; bottom: 5px; }
 
 /* Заливка выигрывает у диапазона: день из done виден даже выпав из [start, start+N)
    после Start over. Тапабельность отдельно решает is_editable. */
@@ -452,6 +535,15 @@ textarea.input {
    opacity увела бы число к контрасту 2.5:1 */
 .cal-cell.off { color: var(--fg-muted); }
 
-.cal-cell.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cal-cell.today { border: 2px solid var(--accent); }
 
 .cal-blank { visibility: hidden; }
+
+/* Меньше движения — не ноль движения: шит появляется, но проявлением, а не выездом снизу;
+   дуга и галочка встают сразу. Смена состояния остаётся видна — заливкой и глифом. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet { animation-name: fade-in; }
+  .ring { transition: none; }
+  .day.today.done::after,
+  .btn.marked::before { animation: none; }
+}
