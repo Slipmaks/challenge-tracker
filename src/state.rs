@@ -30,12 +30,14 @@ impl Challenge {
     /// и при импорте JSON — второе и есть настоящая граница доверия.
     ///
     /// `length = 0` дал бы деление на ноль в проценте кольца, большое N повесило бы браузер
-    /// числом клеток, старт в будущем сделал бы `day_number` нулевым или отрицательным.
+    /// числом клеток, старт в будущем сделал бы `day_number` нулевым или отрицательным,
+    /// а отметка в будущем встала бы галочкой на клетку, которую `toggle` даже снять не даст.
     pub fn sanitize(mut self, today: NaiveDate) -> Self {
         self.length = self.length.clamp(MIN_LENGTH, MAX_LENGTH);
         if self.start > today {
             self.start = today;
         }
+        self.done.retain(|&d| d <= today);
         if self.name.trim().is_empty() {
             self.name = DEFAULT_NAME.to_string();
         }
@@ -286,6 +288,16 @@ mod tests {
         let future = Challenge::new("x".into(), today + Duration::days(5), 30, today);
         assert_eq!(future.start, today, "старт в будущем даёт Day 0, поэтому зажимаем");
         assert_eq!(future.day_number(today), 1);
+    }
+
+    #[test]
+    fn sanitize_drops_future_marks_from_import() {
+        let today = d(TODAY);
+        let mut c = mock();
+        c.done.insert(today + Duration::days(1));
+        let c = c.sanitize(today);
+        assert_eq!(c.done.len(), 13);
+        assert!(c.done.iter().all(|&x| x <= today));
     }
 
     #[test]

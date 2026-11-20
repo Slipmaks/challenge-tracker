@@ -415,7 +415,7 @@ textarea.input {
 .pill-custom::placeholder { color: var(--fg); }
 
 /* Залита ровно одна из четырёх: иначе на длине 45 выбор не виден нигде, а по design.md
-   состояние кодирует заливка. Состояния «Custom выбран» в макете нет — это добор. */
+   состояние кодирует заливка. «Custom выбран» — кадр `04b Settings - apply confirm`. */
 .pill-custom:not(:placeholder-shown) {
   background: var(--accent-tint);
   color: var(--accent-ink);
