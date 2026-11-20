@@ -8,7 +8,15 @@ leptos = { version = "0.8", features = ["csr"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "wasmbind", "serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-web-sys = { version = "0.3", features = ["Window", "Storage"] }
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "DomTokenList",
+    "Storage",
+    "KeyboardEvent",
+] }
 js-sys = "0.3"
 
 [profile.release]

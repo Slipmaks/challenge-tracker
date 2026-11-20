@@ -85,6 +85,11 @@ impl Challenge {
         (self.done_count() as u32 * 100) / self.length
     }
 
+    /// Точная доля [0.0, 1.0] для плавного SVG stroke-dashoffset даже при длинных челленджах.
+    pub fn progress_fraction(&self) -> f64 {
+        (self.done_count() as f64 / self.length as f64).clamp(0.0, 1.0)
+    }
+
     /// Считаем назад от сегодня, если сегодня отмечено, иначе от вчера. Если считать
     /// «включая сегодня», каждое утро до отметки на экране был бы 0 и приложение выглядело
     /// бы сломанным. Ниже `start` не уходим: метрики ограничены окном челленджа.
@@ -149,6 +154,18 @@ impl Challenge {
     /// Тап по клетке работает только на ярусе 44px. См. `cols`.
     pub fn grid_tappable(&self) -> bool {
         self.cols() == 7
+    }
+}
+
+/// Обрезает длинное имя челленджа для узких инлайн-вопросов подтверждения на малых экранах.
+pub fn short_label(name: &str, max_chars: usize) -> String {
+    let trimmed = name.trim();
+    let mut chars = trimmed.chars();
+    let head: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        format!("{}…", head.trim_end())
+    } else {
+        head
     }
 }
 
@@ -414,5 +431,29 @@ mod tests {
         let json = serde_json::to_string(&c).unwrap();
         assert!(json.contains("\"2026-07-25\""), "даты должны читаться руками: {json}");
         assert_eq!(serde_json::from_str::<Challenge>(&json).unwrap(), c);
+    }
+
+    #[test]
+    fn progress_fraction_handles_zero_partial_and_full() {
+        let today = d(TODAY);
+        let empty = Challenge::new("x".into(), today, 30, today);
+        assert_eq!(empty.progress_fraction(), 0.0);
+
+        let partial = mock(); // 13 of 30
+        assert!((partial.progress_fraction() - 13.0 / 30.0).abs() < 1e-9);
+
+        let mut full = Challenge::new("x".into(), today - Duration::days(2), 3, today);
+        for i in 0..3 {
+            full.done.insert(today - Duration::days(i));
+        }
+        assert_eq!(full.progress_fraction(), 1.0);
+    }
+
+    #[test]
+    fn short_label_preserves_short_and_truncates_utf8_safely() {
+        assert_eq!(short_label("  Perfect Posture  ", 28), "Perfect Posture");
+        assert_eq!(short_label("1234567890", 10), "1234567890");
+        assert_eq!(short_label("12345678901", 10), "1234567890…");
+        assert_eq!(short_label("🏃‍♂️ Ежедневная прогулка по утрам", 12), "🏃\u{200d}♂\u{fe0f} Ежеднев…");
     }
 }
