@@ -161,6 +161,16 @@ pub fn form_length(pill: Option<u32>, custom: &str) -> Option<u32> {
     n.filter(|n| (MIN_LENGTH..=MAX_LENGTH).contains(n))
 }
 
+/// Импорт различает две ошибки, потому что лечатся они по-разному: обрезанная вставка —
+/// «вставь файл целиком», чужой JSON — «это не тот файл». Одно «Invalid JSON» не говорило,
+/// что делать дальше.
+pub fn parse_backup(s: &str) -> Result<Challenge, &'static str> {
+    serde_json::from_str(s).map_err(|_| match serde_json::from_str::<serde_json::Value>(s) {
+        Ok(_) => "This isn't a Challenge Tracker backup",
+        Err(_) => "Can't read this — paste the whole backup file",
+    })
+}
+
 // ── Хранилище: один ключ, ~15 строк. Без gloo-storage и без leptos-use ────────────────
 
 const KEY: &str = "challenge-tracker";
@@ -361,6 +371,14 @@ mod tests {
         let mut back = done.clone();
         back.length = 30;
         assert_eq!(done.edit_warning(&back, today), None);
+    }
+
+    #[test]
+    fn backup_errors_say_what_to_do_next() {
+        let json = serde_json::to_string(&mock()).unwrap();
+        assert_eq!(parse_backup(&json).unwrap(), mock());
+        assert!(parse_backup(&json[..json.len() / 2]).unwrap_err().starts_with("Can't read"));
+        assert!(parse_backup(r#"{"foo":1}"#).unwrap_err().starts_with("This isn't"));
     }
 
     #[test]

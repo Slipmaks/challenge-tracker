@@ -109,13 +109,58 @@ fn ConfirmRow(
     }
 }
 
+/// Ошибка или подсказка под полем. Своя форма — иконка и текст `--fg` 14/500, — а не `.hint`
+/// цвета подписи поля: та же 13/400 `--fg-muted` читалась подписью к следующему полю.
+#[component]
+fn Alert(#[prop(into)] text: TextProp) -> impl IntoView {
+    view! {
+        <span class="alert" role="alert">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+            </svg>
+            {move || text.get()}
+        </span>
+    }
+}
+
+/// `Start over` с вопросом — в шите финиша и в футере после его закрытия. Без вопроса один тап
+/// после 100 дней превращал итог в `0/30 · Day 1 of 30`.
+#[component]
+pub fn StartOver(on_start_over: Callback<()>) -> impl IntoView {
+    let (asking, set_asking) = signal(false);
+    view! {
+        <Show
+            when=move || asking.get()
+            fallback=move || {
+                view! {
+                    <button class="btn raised" on:click=move |_| set_asking.set(true)>
+                        "Start over"
+                    </button>
+                }
+            }
+        >
+            <ConfirmRow
+                text="Start over from today? History stays."
+                big=true
+                on_yes=on_start_over
+                on_no=Callback::new(move |_| set_asking.set(false))
+            />
+        </Show>
+    }
+}
+
 /// Вид клетки дня — одно правило для сетки и календаря. Четыре состояния различаются формой,
 /// а не только тенью: галочка — выполнено, точка — пропущено, плоская обводка — нельзя менять
 /// (будущее или вне окна), чистый рельеф — сегодня, ещё не отмечено.
+///
+/// Выполненный день вне окна (прошлый цикл после `Start over`) — тинт без рельефа: рельеф
+/// значит «можно нажать», а этот день не переключается.
 fn day_class(c: &Challenge, d: NaiveDate, today: NaiveDate) -> String {
+    let editable = c.is_editable(d, today);
     let mut cls = String::from(if c.is_done(d) {
-        "done raised-sm"
-    } else if !c.is_editable(d, today) {
+        if editable { "done raised-sm" } else { "done" }
+    } else if !editable {
         "off"
     } else if d < today {
         "missed raised-sm"
@@ -159,54 +204,67 @@ pub fn Ring(cur: Signal<Challenge>, today: NaiveDate) -> impl IntoView {
                             format!("{}/{}", c.done_count(), c.length)
                         }}
                     </div>
-                    <div class="ring-streak">
-                        {move || format!("streak {}", cur.get().current_streak(today))}
-                    </div>
+                    // Нулевая серия не показывается: на первом дне экран был из трёх нулей
+                    {move || {
+                        let s = cur.get().current_streak(today);
+                        (s > 0).then(|| view! { <div class="ring-streak">{format!("streak {s}")}</div> })
+                    }}
                 </div>
             </div>
         </div>
     }
 }
 
+/// Две сетки по `grid_tappable`. До 35 дней — клетки-кнопки. Дальше клетка меньше пальца, и
+/// сетка становится обзором: плоские клетки внутри одной выпуклой панели, а тап по панели
+/// открывает календарь, где правится любой день. Выпуклая панель — потому что рельеф значит
+/// «можно нажать», и нажать здесь можно ровно её.
 #[component]
-pub fn DayGrid(cur: Signal<Challenge>, today: NaiveDate, on_toggle: Callback<NaiveDate>) -> impl IntoView {
-    view! {
-        <div
-            // overview — сетка, по которой не тапают (> 35 дней): плоская, см. style.css.
-            // dense — с 12 колонок: клетка мельче, зазор и скругление 4.
-            class=move || {
-                let c = cur.get();
-                let mut cls = String::from("grid");
-                if !c.grid_tappable() {
-                    cls.push_str(" overview");
-                }
-                if c.cols() >= 12 {
-                    cls.push_str(" dense");
-                }
-                cls
+pub fn DayGrid(
+    cur: Signal<Challenge>,
+    today: NaiveDate,
+    on_toggle: Callback<NaiveDate>,
+    on_open: Callback<()>,
+) -> impl IntoView {
+    move || {
+        let c = cur.get();
+        let style = format!("--cols:{}", c.cols());
+        let days = (0..c.length).map(|i| c.start + Duration::days(i as i64));
+        if c.grid_tappable() {
+            let cells = days
+                .map(|d| {
+                    view! {
+                        <button
+                            class=format!("day {}", day_class(&c, d, today))
+                            aria-label=day_label(d, today)
+                            aria-pressed=day_pressed(&c, d, today)
+                            disabled=!c.is_editable(d, today)
+                            on:click=move |_| on_toggle.run(d)
+                        />
+                    }
+                })
+                .collect_view();
+            view! {
+                <div class="grid" style=style role="group" aria-label="Days">
+                    {cells}
+                </div>
             }
-            style=move || format!("--cols:{}", cur.get().cols())
-            role="group"
-            aria-label="Days"
-        >
-            {move || {
-                let c = cur.get();
-                (0..c.length)
-                    .map(|i| {
-                        let d = c.start + Duration::days(i as i64);
-                        view! {
-                            <button
-                                class=format!("day {}", day_class(&c, d, today))
-                                aria-label=day_label(d, today)
-                                aria-pressed=day_pressed(&c, d, today)
-                                disabled=!(c.is_editable(d, today) && c.grid_tappable())
-                                on:click=move |_| on_toggle.run(d)
-                            />
-                        }
-                    })
-                    .collect_view()
-            }}
-        </div>
+            .into_any()
+        } else {
+            // dense — с 12 колонок: зазор 4 и точка пропуска 4px
+            let cls = if c.cols() >= 12 { "grid overview dense" } else { "grid overview" };
+            let cells = days
+                .map(|d| view! { <span class=format!("day {}", day_class(&c, d, today))></span> })
+                .collect_view();
+            view! {
+                <button class="overview-panel raised" aria-label="Open calendar" on:click=move |_| on_open.run(())>
+                    <span class=cls style=style>
+                        {cells}
+                    </span>
+                </button>
+            }
+            .into_any()
+        }
     }
 }
 
@@ -283,6 +341,9 @@ pub fn CalendarSheet(
                                         .into_any()
                                 }),
                         )
+                        // Всегда 6 недель: иначе шит на 5-недельном месяце ниже на ряд, и стрелка
+                        // месяца уезжает из-под пальца при листании
+                        .chain((lead + days..42).map(|_| view! { <div class="cal-cell cal-blank" /> }.into_any()))
                         .collect_view()
                 }}
             </div>
@@ -296,8 +357,6 @@ pub fn FinishSheet(
     on_start_over: Callback<()>,
     on_close: Callback<()>,
 ) -> impl IntoView {
-    // Start over обнуляет все числа на экране, а это единственная кнопка шита — спрашиваем
-    let (asking, set_asking) = signal(false);
     view! {
         <Sheet title="Challenge complete" on_close=on_close>
             <div class="summary">
@@ -319,26 +378,7 @@ pub fn FinishSheet(
                     {move || format!("best streak {}", cur.get().best_streak())}
                 </div>
             </div>
-            {move || {
-                if asking.get() {
-                    view! {
-                        <ConfirmRow
-                            text="Start over from today? History stays."
-                            big=true
-                            on_yes=on_start_over
-                            on_no=Callback::new(move |_| set_asking.set(false))
-                        />
-                    }
-                        .into_any()
-                } else {
-                    view! {
-                        <button class="btn raised" on:click=move |_| set_asking.set(true)>
-                            "Start over"
-                        </button>
-                    }
-                        .into_any()
-                }
-            }}
+            <StartOver on_start_over />
         </Sheet>
     }
 }
@@ -353,6 +393,9 @@ pub fn SettingsSheet(
     #[prop(default = false)] first_run: bool,
     set_challenge: WriteSignal<Option<Challenge>>,
     on_close: Callback<()>,
+    /// Онбординг: длина из формы, чтобы кольцо и сетка за шитом показывали выбранную, а не 30
+    #[prop(optional)]
+    on_length: Option<Callback<u32>>,
 ) -> impl IntoView {
     let c0 = cur.get_untracked();
     let (name, set_name) = signal(if first_run { String::new() } else { c0.name.clone() });
@@ -363,9 +406,16 @@ pub fn SettingsSheet(
     let (pill, set_pill) = signal(is_pill.then_some(c0.length));
     let (custom, set_custom) = signal(if is_pill { String::new() } else { c0.length.to_string() });
     let length = Memo::new(move |_| state::form_length(pill.get(), &custom.get()));
+    if let Some(cb) = on_length {
+        Effect::new(move |_| {
+            if let Some(n) = length.get() {
+                cb.run(n);
+            }
+        });
+    }
     let (start, set_start) = signal(c0.start.to_string());
     let (paste, set_paste) = signal(String::new());
-    let (bad_json, set_bad_json) = signal(false);
+    let (bad_json, set_bad_json) = signal(None::<&'static str>);
     let (confirm, set_confirm) = signal(Confirm::None);
     let (import_open, set_import_open) = signal(false);
 
@@ -436,24 +486,37 @@ pub fn SettingsSheet(
             .flatten()
     };
 
-    let parsed = move || serde_json::from_str::<Challenge>(&paste.get_untracked()).ok();
+    let parsed = move || state::parse_backup(&paste.get_untracked());
 
     let apply_import = move || match parsed() {
-        Some(c) => {
+        Ok(c) => {
             set_challenge.set(Some(c.sanitize(today)));
             on_close.run(());
         }
-        None => set_bad_json.set(true),
+        Err(e) => set_bad_json.set(Some(e)),
+    };
+
+    // Вопросы называют, что именно пропадёт: «Overwrite?» не говорил, что с чем.
+    // Счёт — весь done, а не done_count: стирается и история прошлых циклов.
+    let marked = move || cur.get_untracked().done.len();
+    let replace_text = move || match marked() {
+        0 => format!("Replace “{}” with the backup?", cur.get_untracked().name),
+        n => format!("Replace “{}” ({n} marked) with the backup?", cur.get_untracked().name),
+    };
+    let erase_text = move || match marked() {
+        0 => format!("Erase “{}”?", cur.get_untracked().name),
+        1 => format!("Erase “{}” and 1 marked day?", cur.get_untracked().name),
+        n => format!("Erase “{}” and {n} marked days?", cur.get_untracked().name),
     };
 
     let import_click = move |_| {
-        set_bad_json.set(false);
+        set_bad_json.set(None);
         match parsed() {
             // Импорт затирает челлендж так же безвозвратно, как сброс, поэтому спрашивает так же.
             // Но спрашивает только про валидные данные — на мусор сразу отвечаем ошибкой.
-            Some(_) if !first_run => set_confirm.set(Confirm::Overwrite),
-            Some(_) => apply_import(),
-            None => set_bad_json.set(true),
+            Ok(_) if !first_run => set_confirm.set(Confirm::Overwrite),
+            Ok(_) => apply_import(),
+            Err(e) => set_bad_json.set(Some(e)),
         }
     };
 
@@ -503,8 +566,15 @@ pub fn SettingsSheet(
                             }
                         })
                         .collect_view()}
+                    // Тинт только у числа, которое и станет длиной: 400 в поле не выбрано
                     <input
-                        class="input pill-custom raised-sm"
+                        class=move || {
+                            if !custom.get().trim().is_empty() && length.get().is_some() {
+                                "input pill-custom on raised-sm"
+                            } else {
+                                "input pill-custom raised-sm"
+                            }
+                        }
                         type="number"
                         min=MIN_LENGTH
                         max=MAX_LENGTH
@@ -524,6 +594,9 @@ pub fn SettingsSheet(
                         }
                     />
                 </div>
+                <Show when=move || length.get().is_none()>
+                    <Alert text="Choose 1–365 days" />
+                </Show>
             </div>
 
             <label class="field">
@@ -588,14 +661,12 @@ pub fn SettingsSheet(
                         prop:value=move || paste.get()
                         on:input=move |ev| set_paste.set(event_target_value(&ev))
                     />
-                    <Show when=move || bad_json.get()>
-                        <span class="hint" role="alert">"Invalid JSON"</span>
-                    </Show>
+                    {move || bad_json.get().map(|e| view! { <Alert text=e /> })}
                     {move || match confirm.get() {
                         Confirm::Overwrite => {
                             view! {
                                 <ConfirmRow
-                                    text="Overwrite?"
+                                    text=replace_text()
                                     on_yes=Callback::new(move |_| apply_import())
                                     on_no=cancel
                                 />
@@ -643,14 +714,14 @@ pub fn SettingsSheet(
                                 // ни модалки над модалкой — один backdrop, один z-index.
                                 Confirm::Reset => {
                                     view! {
-                                        <ConfirmRow text="Reset everything?" on_yes=reset on_no=cancel />
+                                        <ConfirmRow text=erase_text() on_yes=reset on_no=cancel />
                                     }
                                         .into_any()
                                 }
                                 _ => {
                                     view! {
                                         <button
-                                            class="btn-secondary danger raised-sm"
+                                            class="btn-secondary raised-sm"
                                             on:click=move |_| set_confirm.set(Confirm::Reset)
                                         >
                                             "Reset everything"

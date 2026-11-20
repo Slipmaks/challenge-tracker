@@ -4,7 +4,7 @@ mod ui;
 use chrono::{Local, NaiveDate};
 use leptos::{html, prelude::*};
 use state::{Challenge, load, save};
-use ui::{CalendarSheet, DayGrid, FinishSheet, Ring, SettingsSheet};
+use ui::{CalendarSheet, DayGrid, FinishSheet, Ring, SettingsSheet, StartOver};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Sheet {
@@ -39,11 +39,13 @@ fn App() -> impl IntoView {
     });
 
     // За обязательным онбордингом виден главный экран с дефолтами: пустое серое полотно
-    // смотрелось бы как незагрузившееся приложение
+    // смотрелось бы как незагрузившееся приложение. Длина — та, что выбрана в форме: иначе за
+    // шитом всегда стояло 0/30, какую длину ни выбери.
+    let (draft_len, set_draft_len) = signal(30u32);
     let cur = Signal::derive(move || {
         challenge
             .get()
-            .unwrap_or_else(|| Challenge::new(String::new(), today, 30, today))
+            .unwrap_or_else(|| Challenge::new(String::new(), today, draft_len.get(), today))
     });
 
     // Челлендж, чей итог уже посмотрели: другой старт или другая длина — другой финиш
@@ -88,8 +90,11 @@ fn App() -> impl IntoView {
     });
 
     let marked = move || cur.get().is_done(today);
-    // Третий случай кнопки: today вне диапазона — челлендж завершён либо ещё не начался
+    // Онбординг: кнопка за шитом недоступна, отмечать ещё нечего
     let markable = move || challenge.get().is_some() && cur.get().is_editable(today, today);
+    // Дни кончились — на месте Mark day стоит Start over: недоступная кнопка в самой
+    // заметной точке экрана была тупиком, а следующий шаг после финиша — начать заново
+    let finished = move || challenge.get().is_some() && cur.get().is_finished(today);
 
     // is_complete, а не is_finished: финиш приходит на тапе, который отметил последний день, а не
     // на следующее утро. Снял отметку — шит уходит сам, условие перестало выполняться.
@@ -109,30 +114,39 @@ fn App() -> impl IntoView {
             <p class="sub">
                 {move || {
                     let c = cur.get();
+                    // Нулевая лучшая серия не показывается — как и нулевая текущая в кольце
+                    let best = match c.best_streak() {
+                        0 => String::new(),
+                        b => format!(" · best streak {b}"),
+                    };
                     if c.is_complete(today) {
-                        format!("Finished · best streak {}", c.best_streak())
+                        format!("Finished{best}")
                     } else {
-                        format!(
-                            "Day {} of {} · best streak {}",
-                            c.day_number(today),
-                            c.length,
-                            c.best_streak(),
-                        )
+                        format!("Day {} of {}{best}", c.day_number(today), c.length)
                     }
                 }}
             </p>
 
-            <DayGrid cur today on_toggle=toggle />
+            <DayGrid cur today on_toggle=toggle on_open=Callback::new(move |_| set_sheet.set(Sheet::Calendar)) />
 
             <div class="footer">
-                <button
-                    class=move || { if marked() { "btn marked raised" } else { "btn raised" } }
-                    disabled=move || !markable()
-                    aria-pressed=move || if marked() { "true" } else { "false" }
-                    on:click=move |_| toggle.run(today)
+                <Show
+                    when=finished
+                    fallback=move || {
+                        view! {
+                            <button
+                                class=move || { if marked() { "btn marked raised" } else { "btn raised" } }
+                                disabled=move || !markable()
+                                aria-pressed=move || if marked() { "true" } else { "false" }
+                                on:click=move |_| toggle.run(today)
+                            >
+                                {move || if marked() { "Marked" } else { "Mark day" }}
+                            </button>
+                        }
+                    }
                 >
-                    {move || if marked() { "Marked" } else { "Mark day" }}
-                </button>
+                    <StartOver on_start_over=start_over />
+                </Show>
                 <div class="icons">
                     <button
                         class="icon-btn raised-sm"
@@ -167,7 +181,14 @@ fn App() -> impl IntoView {
         // размонтировать. Своим слотом настройки после сброса умирают вместе со своей формой.
         // Закрыть онбординг нельзя, поэтому on_close никогда не зовётся.
         <Show when=move || challenge.get().is_none()>
-            <SettingsSheet cur today first_run=true set_challenge on_close=noop />
+            <SettingsSheet
+                cur
+                today
+                first_run=true
+                set_challenge
+                on_close=noop
+                on_length=Callback::new(move |n| set_draft_len.set(n))
+            />
         </Show>
 
         {move || {
