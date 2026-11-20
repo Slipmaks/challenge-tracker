@@ -1,2 +1,5 @@
 /target
 /dist
+
+.agents/skills
+.gemini/skills
