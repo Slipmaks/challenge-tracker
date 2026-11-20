@@ -46,7 +46,7 @@ No JS dependencies, no CSS framework, no web fonts. The whole visual layer is on
 rustup target add wasm32-unknown-unknown
 cargo install trunk    # doesn't build everywhere — a release binary works, see architecture.md
 trunk serve            # http://localhost:8080
-cargo test             # 13 tests, pure logic from state.rs, runs natively
+cargo test             # 15 tests, pure logic from state.rs, runs natively
 ```
 
 Release build — the same command that produces what Pages serves:

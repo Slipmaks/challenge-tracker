@@ -27,7 +27,7 @@ fn App() -> impl IntoView {
     let (sheet, set_sheet) = signal(Sheet::None);
     // Не bool, а какой именно финиш уже показали. Флагом он не возвращался в false: после смены
     // длины (или после сброса и нового челленджа) шит финиша больше не появлялся, и Start over
-    // приходил только с перезапуском приложения. Не сохраняется: is_finished — производное.
+    // приходил только с перезапуском приложения. Не сохраняется: is_complete — производное.
     let (finish_seen, set_finish_seen) = signal(None::<(NaiveDate, u32)>);
 
     Effect::new(move |_| {
@@ -91,8 +91,10 @@ fn App() -> impl IntoView {
     // Третий случай кнопки: today вне диапазона — челлендж завершён либо ещё не начался
     let markable = move || challenge.get().is_some() && cur.get().is_editable(today, today);
 
+    // is_complete, а не is_finished: финиш приходит на тапе, который отметил последний день, а не
+    // на следующее утро. Снял отметку — шит уходит сам, условие перестало выполняться.
     let finish_open = move || {
-        challenge.get().is_some() && cur.get().is_finished(today) && finish_seen.get() != Some(finish_id())
+        challenge.get().is_some() && cur.get().is_complete(today) && finish_seen.get() != Some(finish_id())
     };
     // Под открытым шитом главный экран inert: Tab не уходит под затемнение, скринридер его не
     // читает. Нативный атрибут вместо самодельной ловушки фокуса.
@@ -107,7 +109,7 @@ fn App() -> impl IntoView {
             <p class="sub">
                 {move || {
                     let c = cur.get();
-                    if c.is_finished(today) {
+                    if c.is_complete(today) {
                         format!("Finished · best streak {}", c.best_streak())
                     } else {
                         format!(

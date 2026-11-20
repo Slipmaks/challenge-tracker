@@ -356,7 +356,13 @@ pub fn SettingsSheet(
 ) -> impl IntoView {
     let c0 = cur.get_untracked();
     let (name, set_name) = signal(if first_run { String::new() } else { c0.name.clone() });
-    let (length, set_length) = signal(c0.length);
+    // Длина — ровно то, что видно в форме: выбранная пилюля или число в Custom
+    // (state::form_length). None — не выбрано ничего или число вне 1–365: Start и Done тогда
+    // недоступны, а не сохраняют невидимое значение и не зажимают молча.
+    let is_pill = [30, 60, 100].contains(&c0.length);
+    let (pill, set_pill) = signal(is_pill.then_some(c0.length));
+    let (custom, set_custom) = signal(if is_pill { String::new() } else { c0.length.to_string() });
+    let length = Memo::new(move |_| state::form_length(pill.get(), &custom.get()));
     let (start, set_start) = signal(c0.start.to_string());
     let (paste, set_paste) = signal(String::new());
     let (bad_json, set_bad_json) = signal(false);
@@ -367,7 +373,7 @@ pub fn SettingsSheet(
     let edited = move || {
         let mut c = cur.get_untracked();
         c.name = name.get_untracked();
-        c.length = length.get_untracked();
+        c.length = length.get_untracked().unwrap_or(c.length);
         c.start = NaiveDate::parse_from_str(&start.get_untracked(), "%Y-%m-%d").unwrap_or(c.start);
         c.sanitize(today)
     };
@@ -390,7 +396,7 @@ pub fn SettingsSheet(
         set_challenge.set(Some(Challenge::new(
             name.get_untracked(),
             s,
-            length.get_untracked(),
+            length.get_untracked().unwrap_or(c0.length),
             today,
         )));
     };
@@ -484,10 +490,13 @@ pub fn SettingsSheet(
                             view! {
                                 <button
                                     class=move || {
-                                        if length.get() == n { "pill on raised-sm" } else { "pill raised-sm" }
+                                        if pill.get() == Some(n) { "pill on raised-sm" } else { "pill raised-sm" }
                                     }
-                                    aria-pressed=move || if length.get() == n { "true" } else { "false" }
-                                    on:click=move |_| set_length.set(n)
+                                    aria-pressed=move || if pill.get() == Some(n) { "true" } else { "false" }
+                                    on:click=move |_| {
+                                        set_pill.set(Some(n));
+                                        set_custom.set(String::new());
+                                    }
                                 >
                                     {n}
                                 </button>
@@ -501,15 +510,17 @@ pub fn SettingsSheet(
                         max=MAX_LENGTH
                         placeholder="Custom"
                         aria-label="Custom length"
-                        // Пусто, пока длина совпадает с пилюлей: иначе рядом стоят «100» и «100»
-                        prop:value=move || match length.get() {
-                            30 | 60 | 100 => String::new(),
-                            n => n.to_string(),
-                        }
+                        inputmode="numeric"
+                        // Своё поле, а не отражение длины: стёртое поле остаётся пустым, а не
+                        // хранит невидимую последнюю цифру. Число в поле снимает выбор с пилюль —
+                        // выбрано всегда что-то одно.
+                        prop:value=move || custom.get()
                         on:input=move |ev| {
-                            if let Ok(n) = event_target_value(&ev).parse::<u32>() {
-                                set_length.set(n);
+                            let v = event_target_value(&ev);
+                            if !v.trim().is_empty() {
+                                set_pill.set(None);
                             }
+                            set_custom.set(v);
                         }
                     />
                 </div>
@@ -610,6 +621,7 @@ pub fn SettingsSheet(
                     view! {
                         <button
                             class="btn raised"
+                            disabled=move || length.get().is_none()
                             on:click=move |_| {
                                 create();
                                 on_close.run(());
@@ -657,7 +669,11 @@ pub fn SettingsSheet(
                                 when=move || warning().is_some()
                                 fallback=move || {
                                     view! {
-                                        <button class="btn raised" on:click=move |_| done.run(())>
+                                        <button
+                                            class="btn raised"
+                                            disabled=move || length.get().is_none()
+                                            on:click=move |_| done.run(())
+                                        >
                                             "Done"
                                         </button>
                                     }

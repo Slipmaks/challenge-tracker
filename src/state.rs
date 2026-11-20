@@ -110,6 +110,13 @@ impl Challenge {
         best
     }
 
+    /// Челлендж пройден: либо его дни кончились, либо сегодня последний день и он отмечен.
+    /// Второе — чтобы финиш приходил на том самом тапе, который его заработал, а не на
+    /// следующий день, когда `is_finished` наконец станет true.
+    pub fn is_complete(&self, today: NaiveDate) -> bool {
+        self.is_finished(today) || (today == self.last_day() && self.is_done(today))
+    }
+
     /// Вопрос перед сохранением настроек, если правка отнимает видимый прогресс: челлендж
     /// завершится или отмеченные дни выпадут из окна. None — правка безопасна и сохраняется
     /// молча. Закрытие шита и есть сохранение, а тап мимо шита — самый частый случайный жест:
@@ -141,6 +148,15 @@ impl Challenge {
     pub fn grid_tappable(&self) -> bool {
         self.cols() == 7
     }
+}
+
+/// Длина, которую форма показывает, и только она: выбранная пилюля или число в `Custom`.
+/// None — не выбрано ничего (поле очистили) или число вне 1–365; тогда Start/Done недоступны.
+/// Раньше поле писало длину только когда текст парсился, и после стирания «21» в форме не было
+/// видно ничего, а челлендж создавался на 2 дня — последнюю цифру, которая ещё парсилась.
+pub fn form_length(pill: Option<u32>, custom: &str) -> Option<u32> {
+    let n = if custom.trim().is_empty() { pill } else { custom.trim().parse().ok() };
+    n.filter(|n| (MIN_LENGTH..=MAX_LENGTH).contains(n))
 }
 
 // ── Хранилище: один ключ, ~15 строк. Без gloo-storage и без leptos-use ────────────────
@@ -333,6 +349,33 @@ mod tests {
         let mut back = done.clone();
         back.length = 30;
         assert_eq!(done.edit_warning(&back, today), None);
+    }
+
+    #[test]
+    fn form_length_is_only_what_the_form_shows() {
+        assert_eq!(form_length(Some(30), ""), Some(30));
+        assert_eq!(form_length(None, "45"), Some(45));
+        assert_eq!(form_length(Some(30), "45"), Some(45), "число в Custom главнее пилюли");
+        assert_eq!(form_length(None, ""), None, "поле очищено, пилюли нет — длины нет");
+        assert_eq!(form_length(None, "0"), None);
+        assert_eq!(form_length(None, "999"), None, "не зажимаем молча в 365");
+        assert_eq!(form_length(None, "-5"), None);
+        assert_eq!(form_length(None, "1.5"), None);
+        assert_eq!(form_length(None, "365"), Some(365));
+    }
+
+    #[test]
+    fn finish_lands_on_the_tap_that_earned_it() {
+        let today = d(TODAY);
+        let mut c = mock(); // день 17
+        c.length = 17; // сегодня — последний день
+        assert!(!c.is_complete(today), "последний день ещё не отмечен");
+        c.toggle(today, today);
+        assert!(c.is_complete(today), "отметка последнего дня — это и есть финиш");
+        assert!(!c.is_finished(today), "is_finished по-прежнему про «дни кончились»");
+        c.toggle(today, today);
+        assert!(!c.is_complete(today), "снял отметку — финиша нет");
+        assert!(c.is_complete(today + Duration::days(1)), "на следующий день — как раньше");
     }
 
     #[test]

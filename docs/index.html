@@ -7,8 +7,8 @@
 <title>Challenge Tracker</title>
 
 <script type="module">
-import init, * as bindings from '/challenge-tracker/challenge-tracker-c8451846d82cfc77.js';
-const wasm = await init({ module_or_path: '/challenge-tracker/challenge-tracker-c8451846d82cfc77_bg.wasm' });
+import init, * as bindings from '/challenge-tracker/challenge-tracker-4904adf72d0d7d74.js';
+const wasm = await init({ module_or_path: '/challenge-tracker/challenge-tracker-4904adf72d0d7d74_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -23,7 +23,7 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 <link rel="manifest" href="manifest.json">
 <!-- iOS для «Добавить на домашний экран» берёт apple-touch-icon и SVG не принимает -->
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="modulepreload" href="/challenge-tracker/challenge-tracker-c8451846d82cfc77.js" crossorigin="anonymous" integrity="sha384-7HJCUvCHmNaPxgipS3lONDeofi3JH8U0FlPSTMzqQqOI26tmtBmuMLLAjN6/z6X4"><link rel="preload" href="/challenge-tracker/challenge-tracker-c8451846d82cfc77_bg.wasm" crossorigin="anonymous" integrity="sha384-41VN2yZ5FUU9HCm/BvvqAY1ay3YbZrMKh0enkgGSGvxmXPDqVniHUgoS8APNZaK0" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="/challenge-tracker/challenge-tracker-4904adf72d0d7d74.js" crossorigin="anonymous" integrity="sha384-/yLhqI2vCkidZVuI/7SGAASJQ7RhrwQnkNa4DwbtuQiekCa8ppKt8LFLeHAAniKw"><link rel="preload" href="/challenge-tracker/challenge-tracker-4904adf72d0d7d74_bg.wasm" crossorigin="anonymous" integrity="sha384-7N3Y67J1jQ9V8At6hPDN2kr52BnJ/KBrSQksSnnNlrNwjBc/2//eEP/LpDgWXuRT" as="fetch" type="application/wasm"></head>
 <body>
 <script>
   // Путь относительный: под /challenge-tracker/ регистрация даст /challenge-tracker/sw.js,
