@@ -61,7 +61,7 @@ fn Sheet(
                 tabindex="-1"
                 on:click=|ev| ev.stop_propagation()
             >
-                <div class="sheet-handle" aria-hidden="true" />
+                {closable.then(|| view! { <div class="sheet-handle" aria-hidden="true" /> })}
                 <div class="sheet-head">
                     <h2 class="sheet-title" id="sheet-title">{title}</h2>
                     {closable
@@ -689,6 +689,17 @@ pub fn FinishSheet(
                             }
                         }}
                     </div>
+                    <div class="summary-dates">
+                        {move || {
+                            let c = cur.get();
+                            let last = c.last_day();
+                            if c.start.year() == last.year() {
+                                format!("{} – {}", c.start.format("%-d %b"), last.format("%-d %b %Y"))
+                            } else {
+                                format!("{} – {}", c.start.format("%-d %b %Y"), last.format("%-d %b %Y"))
+                            }
+                        }}
+                    </div>
                 </div>
             </div>
             <div class="sheet-foot">
@@ -933,7 +944,9 @@ pub fn SettingsSheet(
                             .collect_view()}
                         <input
                             class=move || {
-                                if !custom.get().trim().is_empty() && length.get().is_some() {
+                                if length.get().is_none() {
+                                    "input pill-custom invalid raised-sm"
+                                } else if !custom.get().trim().is_empty() {
                                     "input pill-custom on raised-sm"
                                 } else {
                                     "input pill-custom raised-sm"
@@ -971,108 +984,119 @@ pub fn SettingsSheet(
                     />
                 </label>
 
-                {(!first_run)
-                    .then(|| {
-                        view! {
-                            <a
-                                class=move || {
-                                    if exported.get() {
-                                        "btn-secondary btn-exported raised-sm sep"
-                                    } else {
-                                        "btn-secondary raised-sm sep"
-                                    }
-                                }
-                                download="challenge.json"
-                                href=move || {
-                                    let json = serde_json::to_string(&cur.get()).unwrap_or_default();
-                                    format!(
-                                        "data:application/json;charset=utf-8,{}",
-                                        String::from(js_sys::encode_uri_component(&json)),
-                                    )
-                                }
-                                on:click=on_export_click
-                            >
-                                {move || {
-                                    if exported.get() {
-                                        view! {
-                                            <svg
-                                                class="btn-inline-icon"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="2.2"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                aria-hidden="true"
-                                            >
-                                                <path d="M5 12.5l4.5 4.5L19 7.5" />
-                                            </svg>
-                                            <span>"Backup downloaded"</span>
+                <div class=if first_run { "settings-group" } else { "settings-group sep" }>
+                    {(!first_run)
+                        .then(|| {
+                            view! {
+                                <a
+                                    class=move || {
+                                        if exported.get() {
+                                            "btn-secondary btn-exported raised-sm"
+                                        } else {
+                                            "btn-secondary raised-sm"
                                         }
-                                            .into_any()
-                                    } else {
-                                        view! { <span>"Export JSON"</span> }.into_any()
                                     }
-                                }}
-                            </a>
-                        }
-                    })}
+                                    download="challenge.json"
+                                    href=move || {
+                                        let json = serde_json::to_string(&cur.get()).unwrap_or_default();
+                                        format!(
+                                            "data:application/json;charset=utf-8,{}",
+                                            String::from(js_sys::encode_uri_component(&json)),
+                                        )
+                                    }
+                                    on:click=on_export_click
+                                >
+                                    {move || {
+                                        if exported.get() {
+                                            view! {
+                                                <svg
+                                                    class="btn-inline-icon"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2.2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    aria-hidden="true"
+                                                >
+                                                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                                                </svg>
+                                                <span>"Backup downloaded"</span>
+                                            }
+                                                .into_any()
+                                        } else {
+                                            view! { <span>"Export JSON"</span> }.into_any()
+                                        }
+                                    }}
+                                </a>
+                            }
+                        })}
 
-                <div class="disclosure-group">
-                    <button
-                        class="btn-secondary btn-disclosure raised-sm"
-                        aria-expanded=move || { if import_open.get() { "true" } else { "false" } }
-                        on:click=move |_| set_import_open.update(|v| *v = !*v)
-                    >
-                        <span>"Import JSON"</span>
-                        <svg
-                            class=move || { if import_open.get() { "chevron open" } else { "chevron" } }
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
+                    <div class="disclosure-group">
+                        <button
+                            class="btn-secondary btn-disclosure raised-sm"
+                            aria-expanded=move || { if import_open.get() { "true" } else { "false" } }
+                            on:click=move |_| set_import_open.update(|v| *v = !*v)
                         >
-                            <path d="M6 9l6 6 6-6" />
-                        </svg>
-                    </button>
-                    <div
-                        class=move || { if import_open.get() { "collapse open" } else { "collapse" } }
-                        inert=move || !import_open.get()
-                    >
-                        <div class="collapse-inner">
-                            <div class="field import-field">
-                                <label class="field-label" for="import-json-area">"Paste backup JSON"</label>
-                                <textarea
-                                    id="import-json-area"
-                                    class="input raised-sm"
-                                    placeholder="Paste JSON here"
-                                    prop:value=move || paste.get()
-                                    on:input=move |ev| set_paste.set(event_target_value(&ev))
-                                />
-                                {move || bad_json.get().map(|e| view! { <Alert text=e /> })}
-                                {move || match confirm.get() {
-                                    Confirm::Overwrite => {
-                                        view! {
-                                            <ConfirmRow
-                                                text=replace_text()
-                                                on_yes=Callback::new(move |_| apply_import())
-                                                on_no=cancel_import
-                                            />
+                            <span>"Import JSON"</span>
+                            <svg
+                                class=move || { if import_open.get() { "chevron open" } else { "chevron" } }
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M6 9l6 6 6-6" />
+                            </svg>
+                        </button>
+                        <div
+                            class=move || { if import_open.get() { "collapse open" } else { "collapse" } }
+                            inert=move || !import_open.get()
+                        >
+                            <div class="collapse-inner">
+                                <div class="field import-field">
+                                    <label class="field-label" for="import-json-area">"Paste backup JSON"</label>
+                                    <textarea
+                                        id="import-json-area"
+                                        class=move || {
+                                            if bad_json.get().is_some() {
+                                                "input invalid raised-sm"
+                                            } else {
+                                                "input raised-sm"
+                                            }
                                         }
-                                            .into_any()
-                                    }
-                                    _ => {
-                                        view! {
-                                            <button class="btn-secondary raised-sm" node_ref=import_btn on:click=import_click>
-                                                "Import"
-                                            </button>
+                                        placeholder="Paste JSON here"
+                                        prop:value=move || paste.get()
+                                        on:input=move |ev| {
+                                            set_bad_json.set(None);
+                                            set_paste.set(event_target_value(&ev));
                                         }
-                                            .into_any()
-                                    }
-                                }}
+                                    />
+                                    {move || bad_json.get().map(|e| view! { <Alert text=e /> })}
+                                    {move || match confirm.get() {
+                                        Confirm::Overwrite => {
+                                            view! {
+                                                <ConfirmRow
+                                                    text=replace_text()
+                                                    on_yes=Callback::new(move |_| apply_import())
+                                                    on_no=cancel_import
+                                                />
+                                            }
+                                                .into_any()
+                                        }
+                                        _ => {
+                                            view! {
+                                                <button class="btn-secondary raised-sm" node_ref=import_btn on:click=import_click>
+                                                    "Import"
+                                                </button>
+                                            }
+                                                .into_any()
+                                        }
+                                    }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1106,8 +1130,11 @@ pub fn SettingsSheet(
                                                     stroke-linejoin="round"
                                                     aria-hidden="true"
                                                 >
-                                                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                                                    <path d="M3 3v5h5" />
+                                                    <path d="M3 6h18" />
+                                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                                    <line x1="10" x2="10" y1="11" y2="17" />
+                                                    <line x1="14" x2="14" y1="11" y2="17" />
                                                 </svg>
                                                 <span>"Reset everything"</span>
                                             </button>
